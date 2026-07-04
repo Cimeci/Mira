@@ -11,6 +11,11 @@
 # resend                 # Stage 3 — dispatch email (primaire)
 # sendgrid               # Stage 3 — dispatch email (fallback)
 
+# --- surface API (lane L2) : pipeline exposé en HTTP + SSE (mira/api.py) ---
+fastapi                  # routes + validation Pydantic
+uvicorn[standard]        # serveur ASGI (python -m mira.api)
+
 # --- dev ---
 ruff
 pytest
+httpx                    # client de smoke test (TestClient FastAPI)
