@@ -5,6 +5,15 @@
 
 **Une grande partie du code se fait avec Claude Code** (pas obligatoire). Si tu l'utilises : ouvre-le dans ce dossier, il lit `CLAUDE.md` automatiquement et connaît d'entrée toutes les règles, le workflow git et le standard de code. Dis-lui juste ta lane (Core/Backend/UI/Infra/Démo). Les mêmes règles s'appliquent si tu codes à la main.
 
+## ▶️ Lancer le squelette (tourne sur la stdlib, zéro install)
+```bash
+python3.11 -m mira.demo      # joue les 3 beats de démo (tout mocké)
+# ou, environnement complet :
+bash setup.sh && source .venv/bin/activate
+python -m mira.demo ; pytest -q ; ruff check .
+```
+Le pipeline `Mandate → Locate → Analyze → Notify` tourne end-to-end avec des **mocks**. Chaque lane remplace le mock de son stage par le vrai, derrière les interfaces gelées de `mira/types.py`. Guardrails Mira dans `CLAUDE.md`.
+
 ## ⏱️ Timeline (4–5 juil, venue ferme 22h sam / rouvre 7h dim)
 
 | Bloc | Objectif |
@@ -23,12 +32,12 @@
 - [ ] Formulaire de soumission rempli
 - [ ] README repo : quoi + comment lancer + quelle stack sponsor
 
-## 📌 Statut projet (à remplir sam matin)
-- **Track** : _TBD_
-- **Problem statement** : _TBD_
-- **Idée / one-liner** : _TBD_
-- **Stack sponsor exploitée** : _TBD_
-- **Chemin de démo (les 3 étapes que le jury voit)** : _TBD_
+## 📌 Statut projet
+- **Track** : Safety, Compliance & Agentic AI
+- **Idée** : Mira — agent assistif *consent-first* qui aide une victime de deepfake sexuel non consenti à en obtenir le retrait sous droit EU (RGPD/DSA/loi SREN).
+- **Pipeline** : Mandate → Locate → Analyze → Notify (consent unlocks autonomy).
+- **Chemin de démo (3 beats)** : (1) pas de mandat → l'agent refuse · (2) pipeline complet → notice DSA dans l'inbox · (3) flag mineur → halt + escalade, zéro stockage.
+- **Surface démo** : _à trancher (Next+FastAPI SSE / tout-Python FastAPI SSE)_
 - **URL démo** : _TBD_
 
 ## 🚫 Rappels qui disqualifient

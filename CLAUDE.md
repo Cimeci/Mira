@@ -72,10 +72,21 @@ La démo est notée en live. « Ça devrait marcher » ≠ « ça marche ».
 - Avant de push : `pnpm check` vert. Non négociable.
 
 ## 🛠️ Stack & commandes
-- **Next.js (App Router) + TypeScript + Tailwind**, déploiement **Vercel**. Node/TS d'abord ; Python seulement si une lib l'impose.
-- **LLM** : track Google → **Gemini/Gemma** ; sinon **Claude** (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`). Toujours les modèles les plus récents.
-- `pnpm dev` · `pnpm check` · `pnpm build` · **`bash setup.sh`** (scaffold initial, à lancer une fois le track choisi).
-- Toolchain : node 24, pnpm 9, vercel CLI, gh, git.
+- **Cœur : Python 3.11 + asyncio** (imposé par la spec Mira). Package `mira/` : 4 stages (mandate/locator/analyzer/notifier) + `orchestrator` (consent gate) + `types` (contrats gelés). Le pipeline tourne end-to-end sur des **mocks** ; chaque lane remplace le mock de son stage par le vrai, derrière la même interface.
+- **Surface démo (front)** : à trancher (Next.js+FastAPI SSE, ou tout-Python FastAPI+SSE). Pas de Streamlit (banni).
+- **LLM** : rédaction de notice / instructions locator. Track Google → **Gemini/Gemma** ; sinon **Claude** (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`).
+- Commandes : `bash setup.sh` (venv + deps) · `python -m mira.demo` (les 3 beats, mocks) · `pytest -q` · `ruff check .`. Le squelette tourne **sans rien installer** (stdlib) : `python3.11 -m mira.demo`.
+- Toolchain : python 3.11 (Homebrew), node 24, pnpm 9, vercel CLI, gh, git.
+
+## 🔒 Guardrails Mira (issus de la spec §13 — non négociables)
+- **G-1** aucun stage ne tourne sans `Mandate.active` (vérifié dans l'orchestrateur, une fois).
+- **G-2** le Locator reste strictement dans `scope_urls` (pas de web ouvert).
+- **G-6** pré-check mineur AVANT tout stockage ; mineur suspecté → **halt + escalade, jamais de download/hash/store**.
+- **G-5** hash perceptuel préféré aux octets bruts ; chiffrer ce qui est retenu.
+- **G-7** gate de confirmation victime avant tout envoi externe.
+- **G-9** la notice cite la base légale exacte, **n'invente jamais de pénalité**.
+- **G-12** la démo cible un mock host + inbox de démo uniquement — jamais de vrai contenu/plateforme.
+- En démo, le flag mineur se déclenche par **metadata/URL**, jamais par une image de mineur.
 
 ## 📂 Fichiers du repo
-`README.md` cockpit · `CONTRIBUTING.md` workflow · `TASKS.md` board · `CHEATSHEET.md` playbook skills · `reference/` inspiration (jamais réutilisée comme code).
+`README.md` cockpit · `CONTRIBUTING.md` workflow · `TASKS.md` board · `CHEATSHEET.md` playbook skills · `mira/` le code · `tests/` smoke tests · `reference/` inspiration (jamais réutilisée comme code).
