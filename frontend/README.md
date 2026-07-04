@@ -24,7 +24,7 @@ npm run build    # production build (passes clean: no type/lint errors)
 | `/mandate` | sign the mandate — scroll-gated contract + signature pad |
 | `/signature` | facial signature — KYC face-scan modal (real camera + demo fallback) |
 | `/case` | case created — case card, status, timeline |
-| `/legal` | legal notice · privacy · terms (linked from every footer) |
+| `/legal` | legal hub → `/legal/mentions`, `/legal/privacy`, `/legal/terms` (linked from every footer) |
 
 The five case screens (`/start` → `/case`) are session-only: `SessionGate`
 redirects signed-out visits to `/login?next=…`. `/signature` additionally

@@ -3,9 +3,9 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 const LEGAL_LINKS = [
-  { href: "/legal#mentions", label: "legal notice" },
-  { href: "/legal#privacy", label: "privacy" },
-  { href: "/legal#terms", label: "terms" },
+  { href: "/legal/mentions", label: "legal notice" },
+  { href: "/legal/privacy", label: "privacy" },
+  { href: "/legal/terms", label: "terms" },
 ] as const;
 
 /**

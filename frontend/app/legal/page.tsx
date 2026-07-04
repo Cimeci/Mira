@@ -1,107 +1,87 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { GlowBackdrop } from "@/components/ui/GlowBackdrop";
 import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Panel } from "@/components/ui/Panel";
+import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ScreenTitle } from "@/components/ui/ScreenTitle";
+import { LEGAL_UPDATED } from "@/components/legal/LegalShell";
 
 export const metadata: Metadata = {
   title: "mira — legal",
-  description: "legal notice, privacy, and terms for the mira prototype.",
+  description: "legal notice, privacy policy, and terms for the mira prototype.",
 };
 
-function LegalSection({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Panel
-      id={id}
-      className="scroll-mt-24 p-6"
-      aria-labelledby={`${id}-heading`}
-    >
-      <h2
-        id={`${id}-heading`}
-        className="font-display text-section uppercase tracking-display text-mira-lilac-glow"
-      >
-        {title}
-      </h2>
-      <div className="mt-4 flex flex-col gap-3 text-body-sm leading-relaxed text-mira-muted-text">
-        {children}
-      </div>
-    </Panel>
-  );
-}
+const PAGES = [
+  {
+    href: "/legal/mentions",
+    title: "legal notice",
+    summary: "who publishes mira, where it is hosted, the mit license, and how to reach the team.",
+  },
+  {
+    href: "/legal/privacy",
+    title: "privacy",
+    summary: "the minimum we collect, what we refuse to store, retention limits, and your gdpr rights.",
+  },
+  {
+    href: "/legal/terms",
+    title: "terms",
+    summary: "the mandate you sign, the approvals mira waits for, and the limits of the prototype.",
+  },
+];
 
-export default function LegalScreen() {
+export default function LegalHubScreen() {
   return (
     <div className="relative mx-auto flex min-h-screen w-full max-w-[1440px] flex-col items-center overflow-hidden bg-mira-void">
       <GlowBackdrop />
       <Header />
 
-      <main className="mt-10 mb-14 w-full max-w-[720px] px-5 sm:px-10 lg:px-0">
-        <div className="flex flex-col gap-[26px]">
+      <main className="mb-20 mt-12 w-full max-w-[720px] px-6 lg:px-0">
+        <div className="flex flex-col gap-3">
           <ScreenTitle>legal</ScreenTitle>
-
-          <LegalSection id="mentions" title="legal notice">
-            <p>
-              mira is an open-source prototype built for the raise hackathon
-              2026. it is a technical demonstration, not a commercial service
-              and not legal advice.
-            </p>
-            <p>
-              source code is published under the mit license at
-              github.com/Cimeci/Mira. for any question about this prototype,
-              open an issue on the repository.
-            </p>
-          </LegalSection>
-
-          <LegalSection id="privacy" title="privacy">
-            <p>
-              we collect the minimum needed to open your case: an email address
-              for your session, the urls you report, and your mandate
-              signature. nothing else.
-            </p>
-            <p>
-              media is never stored as raw bytes — evidence is kept as
-              perceptual hashes, and anything retained is encrypted at rest.
-              evidence is deleted after 90 days at the latest, and you can ask
-              for erasure at any time.
-            </p>
-            <p>
-              processing rests on your explicit consent and on the mandate you
-              sign (gdpr art. 6(1)(a)); takedown notices follow the
-              notice-and-action mechanism of the digital services act (dsa
-              art. 16). your face-scan, when used, stays on your device — see
-              the note on the signature screen.
-            </p>
-          </LegalSection>
-
-          <LegalSection id="terms" title="terms">
-            <p>
-              by signing the mandate you authorize mira to act in your name for
-              that case only. the mandate lasts until the case is closed and
-              you can revoke it at any time.
-            </p>
-            <p>
-              nothing leaves mira without you: every external step — platform
-              report, host escalation, official complaint — waits for your
-              explicit approval before it is sent.
-            </p>
-            <p>
-              this demo runs against a mock host and a demo inbox only; no real
-              platform is contacted.
-            </p>
-          </LegalSection>
+          <p className="text-caption uppercase tracking-label text-mira-muted-dim">
+            last updated — {LEGAL_UPDATED}
+          </p>
+          <p className="text-body-sm leading-[1.7] text-mira-muted-text">
+            everything mira commits to, in three short documents written to be
+            read — not scrolled past.
+          </p>
         </div>
+
+        <nav aria-label="legal documents" className="mt-10 flex flex-col gap-5">
+          {PAGES.map((page, index) => (
+            <Link
+              key={page.href}
+              href={page.href}
+              className="group flex items-start gap-5 rounded-card border border-[rgba(181,107,255,0.3)] bg-mira-night p-6 shadow-panel transition-all duration-300 hover:-translate-y-[2px] hover:border-mira-electric-lilac hover:shadow-border-glow"
+            >
+              <span
+                aria-hidden
+                className="font-display text-[26px] leading-none text-mira-neon-purple transition-colors group-hover:text-mira-electric-lilac [text-shadow:0_0_14px_rgba(107,47,165,0.6)]"
+              >
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="flex flex-col gap-2">
+                <span className="font-display text-[17px] lowercase tracking-display text-mira-lilac-glow">
+                  {page.title}
+                </span>
+                <span className="text-body-sm leading-[1.6] text-mira-muted-text">
+                  {page.summary}
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className="ml-auto self-center text-mira-muted-dim transition-all group-hover:translate-x-1 group-hover:text-mira-lilac-glow"
+              >
+                →
+              </span>
+            </Link>
+          ))}
+        </nav>
       </main>
 
-      <Footer>mira handles the process — you stay in control of every legal step.</Footer>
+      <div className="mt-auto w-full">
+        <SiteFooter />
+      </div>
     </div>
   );
 }
