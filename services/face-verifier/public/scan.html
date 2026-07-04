@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mira — face scan (proof of concept)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+  video, canvas { width: 100%; border-radius: 8px; background: #111; }
+  canvas { display: none; }
+  button { padding: 0.6rem 1rem; font-size: 1rem; margin-top: 0.75rem; margin-right: 0.5rem; }
+  #status { margin-top: 1rem; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  .note { font-size: 0.85rem; color: #555; margin-top: 1rem; }
+</style>
+</head>
+<body>
+  <!--
+    L2 proof-of-concept, not final UI — L3 owns the real product frontend.
+    This demonstrates the privacy property that matters: detection and embedding
+    happen entirely in this page, in the browser. The captured frame is never
+    uploaded anywhere — only the resulting 128-d vector is sent to /api/enroll.
+  -->
+  <h1>Face scan</h1>
+  <p class="note">
+    Everything below runs in your browser. The camera frame is analyzed locally and
+    then discarded — only the resulting embedding (a list of 128 numbers, not an
+    image) is sent to the server.
+  </p>
+
+  <label>Case ID: <input id="caseId" value="demo-case" /></label>
+  <br />
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+
+  <div>
+    <button id="startBtn">Start camera</button>
+    <button id="captureBtn" disabled>Capture &amp; enroll</button>
+    <button id="stopBtn" disabled>Stop camera</button>
+  </div>
+
+  <div id="status"></div>
+
+  <script src="/vendor/face-api.min.js"></script>
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const captureBtn = document.getElementById("captureBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    let stream = null;
+    let modelsReady = false;
+
+    function log(msg) {
+      statusEl.textContent += msg + "\n";
+    }
+
+    async function loadModels() {
+      if (modelsReady) return;
+      log("Loading models…");
+      await Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri("/models"),
+        faceapi.nets.faceLandmark68Net.loadFromUri("/models"),
+        faceapi.nets.faceRecognitionNet.loadFromUri("/models"),
+      ]);
+      modelsReady = true;
+      log("Models loaded.");
+    }
+
+    startBtn.addEventListener("click", async () => {
+      startBtn.disabled = true;
+      try {
+        await loadModels();
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        captureBtn.disabled = false;
+        stopBtn.disabled = false;
+        log("Camera started.");
+      } catch (err) {
+        log("Error: " + err.message);
+        startBtn.disabled = false;
+      }
+    });
+
+    stopBtn.addEventListener("click", () => {
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+        stream = null;
+      }
+      video.srcObject = null;
+      captureBtn.disabled = true;
+      stopBtn.disabled = true;
+      startBtn.disabled = false;
+      log("Camera stopped.");
+    });
+
+    captureBtn.addEventListener("click", async () => {
+      captureBtn.disabled = true;
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+
+        // Detection + embedding happen entirely here, in the browser. The frame
+        // drawn above is never uploaded — only the descriptor below is sent.
+        const detection = await faceapi
+          .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+
+        if (!detection) {
+          log("No face detected — try again.");
+          return;
+        }
+
+        const embedding = Array.from(detection.descriptor);
+        const caseId = document.getElementById("caseId").value;
+
+        log("Face detected. Sending embedding only (not the image)…");
+        const res = await fetch("/api/enroll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseId, embedding }),
+        });
+        const body = await res.json();
+        log(res.ok ? "Enrolled: " + JSON.stringify(body).slice(0, 80) + "…" : "Failed: " + JSON.stringify(body));
+      } catch (err) {
+        log("Error: " + err.message);
+      } finally {
+        captureBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
