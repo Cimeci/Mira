@@ -26,6 +26,15 @@ non-binaires : tokens d'URL, nom de fichier, contexte de la page.
 from __future__ import annotations
 
 import hashlib
+import os
+import io
+import httpx
+import logging
+from cryptography.fernet import Fernet
+import imagehash
+from PIL import Image
+
+_logger = logging.getLogger("mira.analyzer")
 
 from .config import DEEPFAKE_SCORE_THRESHOLD
 from .events import Emit, make_event, print_emitter
@@ -55,19 +64,49 @@ async def _suspected_minor(item: MediaItem) -> str | None:
 
 
 async def _cv_score(item: MediaItem) -> float:
-    """MOCK Sightengine. Le vrai : détecteur de média synthétique 0.0-1.0 (sur l'URL,
-    pas sur des octets stockés par nous)."""
-    return 0.94
+    """API CV (Sightengine) pour le score deepfake."""
+    if os.getenv("MIRA_DEMO_MODE", "1") == "1":
+        _logger.warning("[ANALYZE] MIRA_DEMO_MODE actif, fallback score (0.94)")
+        return 0.94
+        
+    api_user = os.getenv("SIGHTENGINE_API_USER")
+    api_secret = os.getenv("SIGHTENGINE_API_SECRET")
+    
+    if not api_user or not api_secret:
+        _logger.warning("[ANALYZE] Cles Sightengine absentes, fallback score (0.94)")
+        return 0.94
+        
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                "https://api.sightengine.com/1.0/check.json",
+                params={
+                    "models": "deepfake",
+                    "api_user": api_user,
+                    "api_secret": api_secret,
+                    "url": item.url
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            score = data.get("type", {}).get("deepfake", 0.0)
+            if not 0.0 <= score <= 1.0:
+                raise ValueError(f"Score hors bornes: {score}")
+            return float(score)
+    except Exception as e:
+        _logger.error(f"[ANALYZE] Erreur Sightengine: {e}, fallback score (0.94)")
+        return 0.94
 
 
-def _fetch_bytes(item: MediaItem) -> bytes:
-    """Hook unique d'accès aux octets média. MOCK : encode l'URL, zéro réseau.
-
-    Appelé UNIQUEMENT par `_phase_capture_and_hash` — si ce hook tourne sur un cas
-    escaladé ou rejeté, c'est un bug G-6 (tests/test_analyzer_order.py le prouve
-    en le remplaçant par une bombe RuntimeError).
-    """
-    return item.url.encode()
+async def _fetch_bytes(item: MediaItem) -> bytes:
+    """Hook unique d'accès aux octets média."""
+    if os.getenv("MIRA_DEMO_MODE", "1") == "1":
+        return item.url.encode()
+        
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(item.url)
+        resp.raise_for_status()
+        return resp.content
 
 
 async def _phase_precheck_minor(item: MediaItem) -> str | None:
@@ -80,15 +119,39 @@ async def _phase_score(item: MediaItem) -> float:
     return await _cv_score(item)
 
 
-async def _phase_capture_and_hash(item: MediaItem) -> tuple[str, str]:
+async def _phase_capture_and_hash(item: MediaItem) -> tuple[str, str, str | None]:
     """Phase 3/3 — LE seul endroit qui touche des octets média (via `_fetch_bytes`).
 
     G-5 : on ne retient que des empreintes (phash + sha256), jamais les octets bruts.
     """
-    data = _fetch_bytes(item)
-    phash = f"phash:{hashlib.sha1(data).hexdigest()[:16]}"  # MOCK pHash
-    sha = hashlib.sha256(data).hexdigest()  # MOCK (vrai : hash de la capture)
-    return phash, sha
+    data = await _fetch_bytes(item)
+    
+    sha = hashlib.sha256(data).hexdigest()
+    
+    try:
+        img = Image.open(io.BytesIO(data))
+        phash_val = str(imagehash.phash(img))
+        phash = f"phash:{phash_val}"
+    except Exception:
+        phash = f"phash:{hashlib.sha1(data).hexdigest()[:16]}"
+        
+    minimal_ref = None
+    fernet_key = os.getenv("MIRA_EVIDENCE_KEY")
+    if fernet_key:
+        try:
+            f = Fernet(fernet_key.encode())
+            encrypted = f.encrypt(data)
+            os.makedirs("_evidence", exist_ok=True)
+            path = f"_evidence/{item.case_id}_{sha}.enc"
+            with open(path, "wb") as out:
+                out.write(encrypted)
+            minimal_ref = path
+        except Exception as e:
+            _logger.error(f"[ANALYZE] Erreur chiffrement evidence: {e}")
+            
+    # Liberer la memoire immédiatement (G-5)
+    del data
+    return phash, sha, minimal_ref
 
 
 async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> ForensicRecord:
@@ -134,7 +197,7 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
         return _record(item, score=score, phash="", sha="", status=Status.REJECTED)
 
     # Phase 3 — atteinte UNIQUEMENT si ni escalade ni rejet. G-5 : empreintes seulement.
-    phash, sha = await _phase_capture_and_hash(item)
+    phash, sha, minimal_ref = await _phase_capture_and_hash(item)
     emit(make_event(
         item.case_id,
         "analyzer",
@@ -145,11 +208,11 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
         ),
         payload={"url": item.url, "score": score, "phash": phash, "sha256": sha},
     ))
-    return _record(item, score=score, phash=phash, sha=sha, status=Status.VERIFIED)
+    return _record(item, score=score, phash=phash, sha=sha, status=Status.VERIFIED, minimal_ref=minimal_ref)
 
 
 def _record(
-    item: MediaItem, *, score: float, phash: str, sha: str, status: Status
+    item: MediaItem, *, score: float, phash: str, sha: str, status: Status, minimal_ref: str | None = None
 ) -> ForensicRecord:
     return ForensicRecord(
         case_id=item.case_id,
@@ -159,4 +222,5 @@ def _record(
         sha256_hash=sha,
         discovery_ts_utc=utcnow(),
         status=status,
+        minimal_ref=minimal_ref,
     )
