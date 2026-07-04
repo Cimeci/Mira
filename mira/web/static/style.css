@@ -76,6 +76,27 @@ a:hover { text-decoration: underline; }
 .scan:active { transform: translateY(1px); }
 
 .commandform { margin: 0; }
+.scenario {
+  background: oklch(22% 0.03 25 / .55); border: 1px solid oklch(38% 0.07 25);
+  border-left: 3px solid oklch(64% 0.17 25); border-radius: 12px;
+  padding: 1rem 1.15rem; margin: 0 0 1.5rem; line-height: 1.6; font-size: .94rem;
+  color: var(--muted);
+}
+.scenario strong { color: var(--text); }
+.scenario em { color: oklch(82% 0.09 60); font-style: normal; }
+
+/* Bandeau protection victime (live view) */
+.shield {
+  display: flex; align-items: center; gap: .6rem; margin-bottom: 1.2rem;
+  background: oklch(24% 0.04 160 / .5); border: 1px solid oklch(40% 0.08 160);
+  border-radius: 10px; padding: .6rem .9rem; font-size: .86rem; color: oklch(85% 0.08 160);
+}
+.protect-done {
+  margin-top: 1.4rem; padding: 1rem 1.2rem; border-radius: 12px;
+  background: oklch(24% 0.05 160 / .5); border: 1px solid oklch(42% 0.1 160);
+  font-size: 1rem; color: var(--text); line-height: 1.5;
+}
+.protect-done b { color: oklch(80% 0.14 160); }
 .hint { color: var(--muted); font-size: .9rem; line-height: 1.6; margin: 1.2rem .2rem; }
 .hint strong { color: var(--text); }
 .mode {

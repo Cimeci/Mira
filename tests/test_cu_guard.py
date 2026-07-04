@@ -19,8 +19,8 @@ from mira.cu.scraper import _validate_url
 
 def test_default_allowlist_is_local_only():
     """Par défaut (G-12) : seule la surface de démo locale est atteignable."""
-    assert guard.is_allowed("http://127.0.0.1:8000/mockhost/gallery.html")
-    assert guard.is_allowed("http://localhost:8000/mockhost/photo/1.html")
+    assert guard.is_allowed("http://127.0.0.1:8000/mockhost/profil.html")
+    assert guard.is_allowed("http://localhost:8000/mockhost/media/1.html")
     assert not guard.is_allowed("https://x.com/victim")
     assert not guard.is_allowed("https://evil-mirror.example/leak.jpg")
 
@@ -50,7 +50,7 @@ def test_require_allowed_raises_out_of_scope():
 # --- 2. Entrée : _validate_url ----------------------------------------------
 
 def test_validate_url_rejects_out_of_scope_host():
-    _validate_url("http://127.0.0.1:8000/mockhost/gallery.html")  # ne lève pas
+    _validate_url("http://127.0.0.1:8000/mockhost/profil.html")  # ne lève pas
     with pytest.raises(ValueError):
         _validate_url("https://vrai-site.example/x")
     with pytest.raises(ValueError):
@@ -62,7 +62,7 @@ def test_validate_url_rejects_out_of_scope_host():
 class _FakePage:
     """Stub minimal : enregistre si goto a été appelé, sans vrai navigateur."""
 
-    def __init__(self, url: str = "http://127.0.0.1:8000/mockhost/gallery.html"):
+    def __init__(self, url: str = "http://127.0.0.1:8000/mockhost/profil.html"):
         self.url = url
         self.goto_calls: list[str] = []
 
@@ -80,7 +80,7 @@ def test_navigate_out_of_scope_blocked_before_goto():
 
 def test_navigate_in_scope_allowed():
     page = _FakePage()
-    target = "http://127.0.0.1:8000/mockhost/photo/2.html"
+    target = "http://127.0.0.1:8000/mockhost/media/2.html"
     result = asyncio.run(exec_action(page, "navigate", {"url": target}))
     assert result["status"] == "ok"
     assert page.goto_calls == [target]
