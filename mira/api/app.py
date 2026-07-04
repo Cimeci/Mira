@@ -14,6 +14,11 @@ from mira.orchestrator import run_until_gate, ConsentError
 from mira.types import Status
 from fastapi.middleware.cors import CORSMiddleware
 
+from pydantic import BaseModel
+
+class ConfirmRequest(BaseModel):
+    confirm: bool
+
 app = FastAPI(title="Mira API")
 
 # CONDITIONNEL: CORS (autorisant le front sur localhost:3000 + preview Vercel)
@@ -130,3 +135,50 @@ async def stream_case(case_id: str, request: Request):
             "X-Accel-Buffering": "no",
         }
     )
+
+@app.post("/confirm/{case_id}")
+async def confirm_case(case_id: str, req: ConfirmRequest):
+    try:
+        case = get_case(case_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="Case not found")
+        
+    if not case.mandate.active:
+        raise HTTPException(status_code=403, detail="Aucun mandat actif pour ce cas ; traitement refusé (G-1).")
+        
+    if case.confirm_future.done():
+        raise HTTPException(status_code=409, detail="Already confirmed or declined")
+        
+    # Resolve the future immediately
+    case.confirm_future.set_result(req.confirm)
+    
+    if not case.task or not case.task.done():
+        raise HTTPException(status_code=409, detail="Pipeline is not ready for confirmation")
+        
+    records, notices = case.task.result()
+    verified_records = [r for r in records if r.status == Status.VERIFIED]
+    if not verified_records:
+        raise HTTPException(status_code=409, detail="No verified record to confirm")
+        
+    record = verified_records[0]
+    notice = notices.get(record.source_url)
+    
+    emit = make_logger(case.queue)
+    
+    from mira.orchestrator import dispatch
+    try:
+        notif_record = await dispatch(
+            record,
+            case.mandate,
+            notice,
+            confirm=lambda _: case.confirm_future,
+            emit=emit
+        )
+    except Exception as e:
+        await case.queue.put(e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+        
+    return {
+        "notice_text": notif_record.notice_text,
+        "host_contact": notif_record.host_contact
+    }
