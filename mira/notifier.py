@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, Mandate, NotificationRecord, Status, utcnow
 
 # --- G-9 : verrou d'exactitude légale -----------------------------------------------------
@@ -100,19 +101,50 @@ async def notify(
     *,
     confirm: Callable[[str], bool],
     log=print,
+    emit: Emit = print_emitter,
 ) -> NotificationRecord:
     """Résout l'hôte, rédige, fait confirmer par la victime, puis envoie."""
     host = _resolve_host(record.source_url)
     notice = _draft_dsa_notice(record, host, mandate)
     log(f"[NOTIFY] hôte résolu : {host}")
 
+    # Le texte de la notice ne va PAS dans le payload (règle events.py) — url seulement.
+    emit(make_event(
+        record.case_id,
+        "notifier",
+        Status.AWAITING_CONFIRM,
+        from_status=Status.VERIFIED,
+        payload={"url": record.source_url},
+    ))
+
     # G-7 : gate de confirmation de la victime avant tout envoi externe.
     if not confirm(notice):
-        log("[NOTIFY] victime décline -> hold/purge, rien n'est envoyé")
+        emit(make_event(
+            record.case_id,
+            "notifier",
+            Status.DECLINED,
+            from_status=Status.AWAITING_CONFIRM,
+            detail="[NOTIFY] victime décline -> hold/purge, rien n'est envoyé",
+            payload={"url": record.source_url},
+        ))
         return _record(record, host, notice, Status.CONFIRMED)
 
+    emit(make_event(
+        record.case_id,
+        "notifier",
+        Status.CONFIRMED,
+        from_status=Status.AWAITING_CONFIRM,
+        payload={"url": record.source_url},
+    ))
     # MOCK dispatch. Le vrai : Resend/portail vers l'inbox de démo uniquement.
-    log(f"[NOTIFY] notice DSA envoyée à {host}")
+    emit(make_event(
+        record.case_id,
+        "notifier",
+        Status.NOTIFIED,
+        from_status=Status.CONFIRMED,
+        detail=f"[NOTIFY] notice DSA envoyée à {host}",
+        payload={"url": record.source_url},
+    ))
     return _record(record, host, notice, Status.NOTIFIED)
 
 
