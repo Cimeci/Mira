@@ -24,7 +24,7 @@ from playwright.async_api import async_playwright
 
 from .agent import _api_key, _config, _run_cu_loop
 from .browser import open_page
-from .scraper import _resolve_creds, _validate_url, extract_images, extract_links
+from .scraper import _resolve_creds, _validate_url, extract_images, extract_links, normalize_url
 
 # Curseurs par défaut calibrés démo (chaque page ≈ 20-40 s en Computer Use).
 _MAX_PAGES = 6
@@ -83,6 +83,7 @@ async def stream_crawl(
     """Explore une surface bornée. Événements : crawl_start · page · (loop) · images ·
     links · done · error. Toute erreur devient un event `error` (jamais silencieux)."""
     _validate_url(start_url)
+    start_url = normalize_url(start_url)
     yield {
         "type": "crawl_start",
         "url": start_url,

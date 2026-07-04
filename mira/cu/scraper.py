@@ -85,10 +85,23 @@ def _dedup(raw: list[dict]) -> list[ScrapedImage]:
     return images
 
 
+# Motifs d'URL typiques du bruit d'interface (icônes, logos, sprites…).
+_NOISE_URL_PATTERNS = ("/static/", "/icons/", "favicon", "sprite", "logo", "/assets/")
+_MIN_DIMENSION = 100  # px : en dessous, c'est une icône / puce / spacer, pas du contenu
+
+
+def _is_content_image(img: ScrapedImage) -> bool:
+    """Écarte le bruit d'UI (icônes, logos) pour ne garder que les vraies images."""
+    if img.width and img.height and (img.width < _MIN_DIMENSION or img.height < _MIN_DIMENSION):
+        return False
+    url = img.url.lower()
+    return not any(pattern in url for pattern in _NOISE_URL_PATTERNS)
+
+
 async def extract_images(page) -> list[ScrapedImage]:
-    """Récolte des <img> rendus sur la page courante."""
+    """Récolte des <img> rendus, hors bruit d'interface (icônes / logos)."""
     raw = await page.evaluate(_EXTRACT_JS)
-    return _dedup(raw)
+    return [img for img in _dedup(raw) if _is_content_image(img)]
 
 
 # JS : renvoie tous les liens <a href> absolus de la page.
@@ -103,13 +116,25 @@ def same_domain(url: str, base: str) -> bool:
     return urlparse(url).netloc.lower() == urlparse(base).netloc.lower()
 
 
+def normalize_url(url: str) -> str:
+    """Forme canonique pour la dédup : sans fragment, sans `index.html` final,
+    sans slash terminal. Évite de visiter `/` ET `/index.html` (même page)."""
+    parsed = urlparse(url.split("#")[0])
+    path = parsed.path
+    if path.endswith("/index.html") or path.endswith("/index.htm"):
+        path = path[: path.rfind("/") + 1]
+    path = path.rstrip("/") or "/"
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{parsed.scheme}://{parsed.netloc.lower()}{path}{query}"
+
+
 async def extract_links(page, base_url: str) -> list[str]:
-    """Liens same-domain de la page courante, dédupliqués, fragment retiré."""
+    """Liens same-domain de la page courante, normalisés et dédupliqués."""
     hrefs = await page.evaluate(_EXTRACT_LINKS_JS)
     seen: set[str] = set()
     links: list[str] = []
     for href in hrefs:
-        clean = href.split("#")[0]
+        clean = normalize_url(href)
         if clean in seen or not same_domain(clean, base_url):
             continue
         seen.add(clean)
