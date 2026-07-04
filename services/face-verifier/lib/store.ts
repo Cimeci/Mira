@@ -1,13 +1,19 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Gitignored — see repo root .gitignore. Mirrors the pattern already used by the
-// Python side's .mira_consent/<case_id>.json for consent artifacts.
-const EVIDENCE_DIR = path.join(__dirname, "..", ".mira_evidence");
-const REFERENCE_DIR = path.join(__dirname, "..", ".mira_reference");
+// Vercel's serverless filesystem is read-only everywhere except /tmp — storage
+// MUST live under os.tmpdir(), not relative to the deployed function's own
+// directory (writing there throws EROFS/EACCES in production even though it
+// works fine in local dev, where the whole checkout is writable).
+//
+// /tmp is ephemeral (not guaranteed to survive a cold start or to be shared
+// across instances) — this is a stopgap so the routes don't crash on write,
+// not real durable storage. ARCHITECTURE.md already calls for Postgres/Supabase
+// as the actual evidence store; this should be replaced by that, not extended.
+const STORAGE_ROOT = path.join(os.tmpdir(), "mira-face-verifier");
+const EVIDENCE_DIR = path.join(STORAGE_ROOT, "evidence");
+const REFERENCE_DIR = path.join(STORAGE_ROOT, "reference");
 
 /**
  * What gets persisted for a candidate image — hash + embedding + score only.
