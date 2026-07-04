@@ -75,3 +75,5 @@ curl -s -XPOST localhost:8000/cases/$CID/confirm -H 'content-type: application/j
 - État **en mémoire, mono-process** : redémarrage = reset ; pas de purge des cases.
 - SSE **single-consumer** : un seul front par case à la fois (suffisant pour la démo).
 - `MIRA_DEMO_MODE=1` plancher le timeout du gate à 900 s (la notice reste à l'écran).
+- **CORS** ouvert par défaut (dev) pour qu'un front sur une autre origine (Next.js :3000)
+  puisse appeler l'API. Restreindre au besoin : `MIRA_CORS_ORIGINS="https://mon-front"`.

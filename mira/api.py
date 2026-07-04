@@ -32,11 +32,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -46,6 +48,20 @@ from .orchestrator import ConsentError, dispatch, run_until_gate
 from .types import Mandate, Status
 
 app = FastAPI(title="Mira — API pipeline (L2)")
+
+# CORS : le front (L3) tourne sur une autre origine (ex. Next.js :3000) ; sans ça, le
+# navigateur bloque tout appel à l'API. Permissif par défaut (dev/démo), restreignable
+# via MIRA_CORS_ORIGINS="https://a,https://b". Pas d'auth par cookie ici -> credentials
+# désactivé (contrainte : interdit de combiner allow_origins=["*"] et credentials).
+_origins = os.getenv("MIRA_CORS_ORIGINS", "*").strip()
+_cors_origins = ["*"] if _origins == "*" else [o.strip() for o in _origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Sentinelle de fin de flux : distingue « plus d'événements » d'un message vide.
 _STREAM_END = object()
