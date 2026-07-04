@@ -14,3 +14,9 @@
 # --- dev ---
 ruff
 pytest
+
+# --- L2 API Scaffold ---
+fastapi
+uvicorn
+sse-starlette
+pydantic
