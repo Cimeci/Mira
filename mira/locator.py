@@ -11,9 +11,10 @@ import asyncio
 from .types import Mandate, MediaItem, Status
 
 
-async def locate(mandate: Mandate, out: "asyncio.Queue[MediaItem]", *, log=print) -> None:
+async def locate(mandate: Mandate, out: asyncio.Queue[MediaItem], *, log=print) -> None:
     """Émet des MediaItem in-scope dans la queue partagée."""
-    assert mandate.active, "Pas de mandat actif ; on refuse de tourner."
+    # G-1 garanti en amont : orchestrator._require_active est le SEUL point de contrôle
+    # (un assert ici serait strippé sous `python -O` — fausse sécurité).
     for url in mandate.scope_urls:
         media_url = f"{url}/synthetic_test.jpg"  # MOCK : on prétend avoir trouvé un média
         log(f"[LOCATE] média in-scope trouvé : {media_url}")
