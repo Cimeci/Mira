@@ -25,9 +25,9 @@ class ScrapeResult:
     images: list[ScrapedImage] = field(default_factory=list)
     steps: list[str] = field(default_factory=list)   # trace des actions de l'agent
     screenshot_url: str | None = None                # capture full-page (preuve visuelle)
-    driver: str = "playwright"                        # "playwright" | "gemini-cu"
+    driver: str = "playwright"        # "playwright" | "gemini-cu"
     elapsed_s: float = 0.0
-    error: str | None = None                          # message si le run a échoué (jamais silencieux)
+    error: str | None = None          # message si le run a échoué (jamais avalé en silence)
 
     @property
     def count(self) -> int:

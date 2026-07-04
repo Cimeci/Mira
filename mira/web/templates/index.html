@@ -13,29 +13,41 @@
       <p class="tagline">Locator · balayage d'images piloté agent</p>
     </header>
 
-    <form class="commandbar" method="post" action="/scrape">
-      <span class="prompt">▸</span>
-      <input
-        class="url-input"
-        type="text"
-        name="url"
-        value="{{ default_url }}"
-        spellcheck="false"
-        autocomplete="off"
-        autofocus
-        aria-label="URL à analyser"
-      />
-      <button class="scan" type="submit">Scanner</button>
+    <form class="commandform" method="get" action="/live">
+      <div class="commandbar">
+        <span class="prompt">▸</span>
+        <input
+          class="url-input"
+          type="text"
+          name="url"
+          value="{{ default_url }}"
+          spellcheck="false"
+          autocomplete="off"
+          autofocus
+          aria-label="URL à analyser"
+        />
+        <button class="scan" type="submit">Scanner</button>
+      </div>
+
+      <fieldset class="engine">
+        <legend>moteur de navigation</legend>
+        <label class="eng-opt">
+          <input type="radio" name="driver" value="playwright" checked />
+          <span class="eng-name">Déterministe</span>
+          <span class="eng-sub">script Playwright · rapide, fiable</span>
+        </label>
+        <label class="eng-opt">
+          <input type="radio" name="driver" value="gemini-cu" />
+          <span class="eng-name">Computer Use</span>
+          <span class="eng-sub">Gemini pilote · l'agent décide · ~30-50&nbsp;s</span>
+        </label>
+      </fieldset>
     </form>
 
     <p class="hint">
-      L'agent ouvre l'URL, scrolle pour charger toutes les vignettes, puis collecte les images.
+      L'agent ouvre l'URL, franchit un éventuel login, scrolle, puis collecte les images.
       <br />Cible préremplie : le <strong>mock host</strong> de démo — <a href="/mockhost/" target="_blank" rel="noreferrer">le voir</a>.
     </p>
-
-    <div class="mode">
-      <span class="dot"></span> moteur : <strong>déterministe</strong> (Playwright) — Gemini Computer Use se branche par-dessus
-    </div>
   </main>
 </body>
 </html>

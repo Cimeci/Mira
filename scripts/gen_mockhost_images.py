@@ -21,7 +21,8 @@ PALETTE = [
     ("#0c1d3a", "#60a5fa"), ("#241804", "#facc15"), ("#111827", "#94a3b8"),
 ]
 
-TEMPLATE = """<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
+TEMPLATE = """<svg xmlns="http://www.w3.org/2000/svg"
+     width="640" height="640" viewBox="0 0 640 640">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="{c0}"/>

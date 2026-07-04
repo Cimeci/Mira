@@ -12,14 +12,17 @@ Nouvelle dépendance structurante pour l'équipe : FastAPI + uvicorn + jinja2.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from mira.cu.scraper import scrape_images
+from mira.cu.agent import scrape_images_cu, stream_scrape_cu
+from mira.cu.models import ScrapeResult
+from mira.cu.scraper import scrape_images, stream_scrape_det
 
 _BASE = Path(__file__).resolve().parent
 _MOCKHOST = _BASE.parent / "mockhost"
@@ -48,14 +51,55 @@ async def index(request: Request) -> HTMLResponse:
 
 
 @app.post("/scrape", response_class=HTMLResponse)
-async def scrape(request: Request, url: str = Form(...)) -> HTMLResponse:
+async def scrape(
+    request: Request,
+    url: str = Form(...),
+    driver: str = Form("playwright"),
+) -> HTMLResponse:
     url = url.strip()
     shot_path, shot_url = _shot_paths(url)
     try:
-        result = await scrape_images(url, screenshot_path=shot_path, screenshot_url=shot_url)
+        if driver == "gemini-cu":
+            result = await scrape_images_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
+            # Filet de sécurité démo : si l'agent CU échoue, on retombe sur le
+            # moteur déterministe pour ne jamais présenter un écran vide au jury.
+            if result.error:
+                cu_error = result.error
+                result = await scrape_images(
+                    url, screenshot_path=shot_path, screenshot_url=shot_url
+                )
+                result.steps.insert(0, f"↩️ bascule déterministe (Computer Use : {cu_error})")
+        else:
+            result = await scrape_images(url, screenshot_path=shot_path, screenshot_url=shot_url)
     except ValueError as exc:
-        # URL structurellement invalide → on rend une page résultats en mode erreur.
-        from mira.cu.models import ScrapeResult
-
+        # URL structurellement invalide → page résultats en mode erreur.
         result = ScrapeResult(source_url=url, error=str(exc))
     return templates.TemplateResponse(request, "results.html", {"result": result})
+
+
+@app.get("/live", response_class=HTMLResponse)
+async def live(request: Request, url: str, driver: str = "gemini-cu") -> HTMLResponse:
+    """Page live view : ouvre un flux SSE et affiche l'écran de l'agent en direct."""
+    return templates.TemplateResponse(request, "live.html", {"url": url, "driver": driver})
+
+
+@app.get("/stream")
+async def stream(url: str, driver: str = "gemini-cu") -> StreamingResponse:
+    """Flux SSE : chaque étape de l'agent (capture + décision) est poussée au front."""
+    url = url.strip()
+    shot_path, shot_url = _shot_paths(url)
+    generator = (
+        stream_scrape_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
+        if driver == "gemini-cu"
+        else stream_scrape_det(url, screenshot_path=shot_path, screenshot_url=shot_url)
+    )
+
+    async def _events():
+        try:
+            async for event in generator:
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:  # noqa: BLE001 — toute erreur devient un event SSE
+            payload = {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
+            yield f"data: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(_events(), media_type="text/event-stream")
