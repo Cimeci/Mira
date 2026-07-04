@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 
 from mira.api.schemas import RunRequest, CaseCreated
-from mira.api.store import create_case, CaseAlreadyExists
-from mira.api.events import make_logger
+from mira.api.store import create_case, CaseAlreadyExists, get_case, CaseNotFound
+from mira.api.events import make_logger, to_sse, to_sse_done
 from mira.orchestrator import run_until_gate, ConsentError
+from mira.types import Status
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Mira API")
@@ -61,6 +62,71 @@ async def run_pipeline(req: RunRequest):
         raise HTTPException(status_code=409, detail="Case already active")
         
     emit = make_logger(case_state.queue)
-    case_state.task = asyncio.create_task(run_until_gate(mandate, emit=emit))
+    
+    async def task_wrapper():
+        try:
+            await run_until_gate(mandate, emit=emit)
+        except Exception as e:
+            await case_state.queue.put(e)
+            
+    case_state.task = asyncio.create_task(task_wrapper())
     
     return CaseCreated(case_id=req.case_id, stream_url=f"/stream/{req.case_id}")
+
+@app.get("/stream/{case_id}")
+async def stream_case(case_id: str, request: Request):
+    try:
+        case = get_case(case_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="Case not found")
+        
+    if case.status == "DONE":
+        raise HTTPException(status_code=404, detail="Stream already finished")
+        
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    if case.task and not case.task.done():
+                        case.task.cancel()
+                    break
+                
+                try:
+                    event = await asyncio.wait_for(case.queue.get(), timeout=15.0)
+                    
+                    if isinstance(event, Exception):
+                        if isinstance(event, ConsentError):
+                            yield f"event: refus\ndata: {{}}\n\n"
+                        else:
+                            yield f"event: failed\ndata: {{\"error\": \"{type(event).__name__}\"}}\n\n"
+                        case.status = "DONE"
+                        break
+                        
+                    yield to_sse(event)
+                    
+                    terminal_statuses = {
+                        Status.REJECTED, 
+                        Status.ESCALATED, 
+                        Status.DECLINED, 
+                        Status.NOTIFIED, 
+                        Status.FAILED,
+                        Status.REVOKED
+                    }
+                    if event.to_status in terminal_statuses:
+                        yield to_sse_done()
+                        case.status = "DONE"
+                        break
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+        except Exception as e:
+            yield f"event: error\ndata: {{\"detail\": \"{str(e)}\"}}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
