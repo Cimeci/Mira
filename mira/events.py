@@ -37,7 +37,7 @@ Transitions émises (ordre nominal d'un run happy path)
                       2) stage "notifier" — payload {url} : le gate G-7 standard.
                     (en appel DIRECT de notifier.notify, seul le 2) est émis)
   CONFIRMED         notifier, victime approuve   — payload {url}
-  DECLINED          notifier, victime refuse     — payload {url} ; run s'arrête là
+  DECLINED          notifier, victime refuse ou timeout — payload {url} (+ reason="confirm_timeout" sur timeout) ; run s'arrête là
   NOTIFIED          notifier, après dispatch     — payload {url}
   FAILED            PAS ENCORE ÉMIS — arrive avec la tâche l1-failed-handling
   REVOKED           PAS ENCORE ÉMIS — arrive avec la tâche l1-revoke-purge
