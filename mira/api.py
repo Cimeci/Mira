@@ -376,10 +376,15 @@ def _pick_confirmation(run: CaseRun, url: str | None) -> asyncio.Future[bool] | 
 
 
 def main() -> None:
-    """Lanceur local : `python -m mira.api` (équivalent `uvicorn mira.api:app`)."""
+    """Lanceur local : `python -m mira.api` (équivalent `uvicorn mira.api:app`).
+
+    Port via MIRA_API_PORT (défaut 8000) — permet de cohabiter avec mira.web
+    (MIRA_WEB_PORT, défaut 8001) sous un même `bash dev.sh`.
+    """
     import uvicorn
 
-    uvicorn.run("mira.api:app", host="127.0.0.1", port=8000, reload=False)
+    port = int(os.getenv("MIRA_API_PORT", "8000"))
+    uvicorn.run("mira.api:app", host="127.0.0.1", port=port, reload=False)
 
 
 if __name__ == "__main__":

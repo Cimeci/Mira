@@ -18,7 +18,7 @@ from google.genai import types
 from playwright.async_api import Page, async_playwright
 
 MODEL = "gemini-2.5-computer-use-preview-10-2025"
-DEFAULT_URL = "http://127.0.0.1:8000/mockhost/"
+DEFAULT_URL = "http://127.0.0.1:8001/mockhost/"
 MAX_STEPS = 10
 VIEWPORT = {"width": 1280, "height": 900}
 

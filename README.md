@@ -12,6 +12,14 @@ python3.11 -m mira.demo      # joue les 3 beats de démo (tout mocké)
 bash setup.sh && source .venv/bin/activate
 python -m mira.demo ; pytest -q ; ruff check .
 ```
+
+## 🚀 Tout lancer en local (une commande)
+```bash
+bash dev.sh                  # API pipeline :8000 · locator CU :8001 · face-verifier :3001
+```
+Ctrl+C arrête tout. Ports surchargeables via `MIRA_API_PORT` / `MIRA_WEB_PORT` /
+`FACE_VERIFIER_PORT`. Le face-verifier (Node) n'est démarré que si
+`services/face-verifier/node_modules` existe (`cd services/face-verifier && npm install`).
 Le pipeline `Mandate → Locate → Analyze → Notify` tourne end-to-end avec des **mocks**. Chaque lane remplace le mock de son stage par le vrai, derrière les interfaces gelées de `mira/types.py`. Guardrails Mira dans `CLAUDE.md`.
 
 ## ⏱️ Timeline (4–5 juil, venue ferme 22h sam / rouvre 7h dim)
