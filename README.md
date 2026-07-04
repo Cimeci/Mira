@@ -1,4 +1,7 @@
-# 🏆 Mira — RAISE Hackathon 2026 (Cockpit)
+<img width="1792" height="592" alt="image" src="https://github.com/user-attachments/assets/4e248cd0-d80b-446d-b7c4-b694e92d92e2" />
+
+
+# 🏆 Mira — RAISE Hackathon 2026
 
 > Workspace de build, équipe de 5. Ship une démo qui **marche**. Submission **dimanche 12h00**.
 > Repo : `github.com/Cimeci/Mira` · Archi & moteur → `ARCHITECTURE.md` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
