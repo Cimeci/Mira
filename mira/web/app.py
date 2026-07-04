@@ -1,12 +1,13 @@
-"""API + surface de démo du locator d'images.
+"""API + surface de démo du locator d'images (100% Computer Use).
 
 Routes :
   GET  /            → formulaire (une ligne d'URL, préremplie sur le mock host)
-  POST /scrape      → lance le scraper, rend la page résultats (galerie)
+  GET  /live        → live view : écran de l'agent en direct pendant le scan
+  GET  /stream      → flux SSE (captures + décisions de l'agent Gemini)
+  POST /scrape      → variante non-streamée (rend la page résultats d'un coup)
   GET  /mockhost/*  → sert la cible de démo (galerie de profil factice)
 
-Nouvelle dépendance structurante pour l'équipe : FastAPI + uvicorn + jinja2.
-(Déjà pressenti dans le plan : `mira/api.py` + SSE.)
+Dépendance structurante pour l'équipe : FastAPI + uvicorn + jinja2 + google-genai.
 """
 
 from __future__ import annotations
@@ -22,14 +23,13 @@ from fastapi.templating import Jinja2Templates
 
 from mira.cu.agent import scrape_images_cu, stream_scrape_cu
 from mira.cu.models import ScrapeResult
-from mira.cu.scraper import scrape_images, stream_scrape_det
 
 _BASE = Path(__file__).resolve().parent
 _MOCKHOST = _BASE.parent / "mockhost"
 _SHOTS = _BASE / "static" / "shots"
 _SHOTS.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Mira — Locator (image sweep)")
+app = FastAPI(title="Mira — Locator (Computer Use)")
 templates = Jinja2Templates(directory=str(_BASE / "templates"))
 app.mount("/static", StaticFiles(directory=str(_BASE / "static")), name="static")
 app.mount("/mockhost", StaticFiles(directory=str(_MOCKHOST), html=True), name="mockhost")
@@ -45,32 +45,16 @@ def _shot_paths(url: str) -> tuple[str, str]:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     default_url = f"{str(request.base_url).rstrip('/')}/mockhost/"
-    return templates.TemplateResponse(
-        request, "index.html", {"default_url": default_url}
-    )
+    return templates.TemplateResponse(request, "index.html", {"default_url": default_url})
 
 
 @app.post("/scrape", response_class=HTMLResponse)
-async def scrape(
-    request: Request,
-    url: str = Form(...),
-    driver: str = Form("playwright"),
-) -> HTMLResponse:
+async def scrape(request: Request, url: str = Form(...)) -> HTMLResponse:
+    """Scan non-streamé : agrège la boucle Computer Use en une page résultats."""
     url = url.strip()
     shot_path, shot_url = _shot_paths(url)
     try:
-        if driver == "gemini-cu":
-            result = await scrape_images_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
-            # Filet de sécurité démo : si l'agent CU échoue, on retombe sur le
-            # moteur déterministe pour ne jamais présenter un écran vide au jury.
-            if result.error:
-                cu_error = result.error
-                result = await scrape_images(
-                    url, screenshot_path=shot_path, screenshot_url=shot_url
-                )
-                result.steps.insert(0, f"↩️ bascule déterministe (Computer Use : {cu_error})")
-        else:
-            result = await scrape_images(url, screenshot_path=shot_path, screenshot_url=shot_url)
+        result = await scrape_images_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
     except ValueError as exc:
         # URL structurellement invalide → page résultats en mode erreur.
         result = ScrapeResult(source_url=url, error=str(exc))
@@ -78,21 +62,17 @@ async def scrape(
 
 
 @app.get("/live", response_class=HTMLResponse)
-async def live(request: Request, url: str, driver: str = "gemini-cu") -> HTMLResponse:
+async def live(request: Request, url: str) -> HTMLResponse:
     """Page live view : ouvre un flux SSE et affiche l'écran de l'agent en direct."""
-    return templates.TemplateResponse(request, "live.html", {"url": url, "driver": driver})
+    return templates.TemplateResponse(request, "live.html", {"url": url})
 
 
 @app.get("/stream")
-async def stream(url: str, driver: str = "gemini-cu") -> StreamingResponse:
+async def stream(url: str) -> StreamingResponse:
     """Flux SSE : chaque étape de l'agent (capture + décision) est poussée au front."""
     url = url.strip()
     shot_path, shot_url = _shot_paths(url)
-    generator = (
-        stream_scrape_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
-        if driver == "gemini-cu"
-        else stream_scrape_det(url, screenshot_path=shot_path, screenshot_url=shot_url)
-    )
+    generator = stream_scrape_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
 
     async def _events():
         try:

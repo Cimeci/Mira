@@ -28,26 +28,17 @@
         />
         <button class="scan" type="submit">Scanner</button>
       </div>
-
-      <fieldset class="engine">
-        <legend>moteur de navigation</legend>
-        <label class="eng-opt">
-          <input type="radio" name="driver" value="playwright" checked />
-          <span class="eng-name">Déterministe</span>
-          <span class="eng-sub">script Playwright · rapide, fiable</span>
-        </label>
-        <label class="eng-opt">
-          <input type="radio" name="driver" value="gemini-cu" />
-          <span class="eng-name">Computer Use</span>
-          <span class="eng-sub">Gemini pilote · l'agent décide · ~30-50&nbsp;s</span>
-        </label>
-      </fieldset>
     </form>
 
     <p class="hint">
-      L'agent ouvre l'URL, franchit un éventuel login, scrolle, puis collecte les images.
+      <strong>Gemini Computer Use</strong> ouvre l'URL, franchit un éventuel login, scrolle,
+      puis collecte les images — l'agent décide de chaque geste (~30-50&nbsp;s).
       <br />Cible préremplie : le <strong>mock host</strong> de démo — <a href="/mockhost/" target="_blank" rel="noreferrer">le voir</a>.
     </p>
+
+    <div class="mode">
+      <span class="dot"></span> moteur : <strong>Gemini Computer Use</strong> — navigation 100% agentique
+    </div>
   </main>
 </body>
 </html>
