@@ -1,0 +1,83 @@
+import { Canvas, Image, ImageData, createCanvas, loadImage } from "canvas";
+import * as faceapi from "face-api.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// face-api.js expects browser DOM globals (Canvas/Image/ImageData) — provide them
+// via node-canvas. Must run before any faceapi.nets.* call.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+faceapi.env.monkeyPatch({ Canvas: Canvas as any, Image: Image as any, ImageData: ImageData as any });
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const MODELS_DIR = path.join(__dirname, "..", "models");
+
+/** Recommended by face-api.js for its 128-d recognition descriptor: below this
+ * Euclidean distance, two descriptors are considered the same person. */
+export const MATCH_DISTANCE_THRESHOLD = 0.6;
+
+let modelsLoaded: Promise<void> | null = null;
+
+/** Loads model weights once per cold start (module-level singleton) — avoids
+ * re-reading ~7MB of weights from disk on every invocation of a warm function. */
+function ensureModelsLoaded(): Promise<void> {
+  if (!modelsLoaded) {
+    modelsLoaded = Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromDisk(MODELS_DIR),
+      faceapi.nets.faceLandmark68Net.loadFromDisk(MODELS_DIR),
+      faceapi.nets.faceRecognitionNet.loadFromDisk(MODELS_DIR),
+    ]).then(() => undefined);
+  }
+  return modelsLoaded;
+}
+
+export class NoFaceDetectedError extends Error {
+  constructor() {
+    super("no_face_detected");
+    this.name = "NoFaceDetectedError";
+  }
+}
+
+/**
+ * Detects the largest face in the image and returns its 128-d descriptor.
+ * Throws NoFaceDetectedError if no face is found — callers decide how to
+ * surface that (never silently return a zero vector, which would look like
+ * a false "match" against anything).
+ */
+export async function computeFaceDescriptor(buffer: Buffer): Promise<Float32Array> {
+  await ensureModelsLoaded();
+
+  const image = await loadImage(buffer);
+  const canvas = createCanvas(image.width, image.height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(image, 0, 0);
+
+  const detection = await faceapi
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .detectSingleFace(canvas as any, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) {
+    throw new NoFaceDetectedError();
+  }
+
+  return detection.descriptor;
+}
+
+export function euclideanDistance(a: Float32Array | number[], b: Float32Array | number[]): number {
+  if (a.length !== b.length) {
+    throw new Error(`descriptor length mismatch: ${a.length} vs ${b.length}`);
+  }
+  let sumSquares = 0;
+  for (let i = 0; i < a.length; i++) {
+    const diff = a[i] - b[i];
+    sumSquares += diff * diff;
+  }
+  return Math.sqrt(sumSquares);
+}
+
+/** Monotonic 0-1 display score from a distance — NOT what match/no-match decisions
+ * are based on (that's MATCH_DISTANCE_THRESHOLD on the raw distance). */
+export function similarityFromDistance(distance: number): number {
+  return 1 / (1 + distance);
+}
