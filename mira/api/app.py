@@ -40,6 +40,17 @@ async def consent_error_handler(request: Request, exc: ConsentError):
         content={"detail": "Aucun mandat actif pour ce cas ; traitement refusé (G-1)."}
     )
 
+import logging
+logger = logging.getLogger("mira.api")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled error on %s %s: %s", request.method, request.url, exc, exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
