@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
+    "dev:local": "tsx scripts/dev-server.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +16,7 @@
     "face-api.js": "^0.22.2"
   },
   "devDependencies": {
+    "tsx": "^4.23.0",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
   }
