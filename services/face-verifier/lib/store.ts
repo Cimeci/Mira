@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { REPOST_HAMMING_THRESHOLD, hammingDistanceHex } from "./hash.js";
 
 // Vercel's serverless filesystem is read-only everywhere except /tmp — storage
 // MUST live under os.tmpdir(), not relative to the deployed function's own
@@ -82,6 +83,13 @@ export async function saveEvidence(record: EvidenceRecord): Promise<void> {
   const next = previous.catch(() => {}).then(async () => {
     await ensureDir(EVIDENCE_DIR);
     const existing = await loadEvidence(record.caseId);
+    // Same image reposted/recompressed elsewhere for this case — don't store a
+    // second near-identical record for what a human reviewer would see as one
+    // piece of evidence, not two.
+    const isRepost = existing.some(
+      (e) => hammingDistanceHex(e.perceptualHash, record.perceptualHash) <= REPOST_HAMMING_THRESHOLD,
+    );
+    if (isRepost) return;
     existing.push(record);
     await writeFile(evidencePath(record.caseId), JSON.stringify(existing, null, 2), "utf-8");
   });

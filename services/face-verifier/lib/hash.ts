@@ -44,6 +44,11 @@ export async function perceptualHash(input: ImageInput): Promise<string> {
   return hex;
 }
 
+/** Hamming distance at or below this is treated as the same image (recompressed,
+ * resized, or re-uploaded) rather than a genuinely different one — matches the
+ * tolerance validated by the repost-tolerance case in tests/hash.test.ts. */
+export const REPOST_HAMMING_THRESHOLD = 4;
+
 /** Hamming distance between two hex-encoded perceptual hashes — smaller means more similar. */
 export function hammingDistanceHex(a: string, b: string): number {
   if (a.length !== b.length) return Number.POSITIVE_INFINITY;

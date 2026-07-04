@@ -48,14 +48,16 @@ describe("evidence store", () => {
       caseId,
       sourceUrl: "https://example.test/photo.jpg",
       sha256Hash: "a",
-      perceptualHash: "b",
+      perceptualHash: "0000000000000000",
       similarityScore: null,
       isMatch: false,
       discoveredAt: new Date().toISOString(),
     } satisfies EvidenceRecord;
 
+    // Genuinely different perceptual hash (not just a different sha256) — these
+    // represent two distinct images, not a repost of the same one.
     await saveEvidence(base);
-    await saveEvidence({ ...base, sha256Hash: "c" });
+    await saveEvidence({ ...base, sha256Hash: "c", perceptualHash: "ffffffffffffffff" });
     const loaded = await loadEvidence(caseId);
     expect(loaded).toHaveLength(2);
   });
@@ -132,11 +134,13 @@ describe("evidence store", () => {
     const caseId = testCaseId();
     caseIds.push(caseId);
 
+    // Distinct (far-apart) perceptual hashes so none of these get treated as
+    // reposts of each other — this test is about the write race, not dedup.
     const makeRecord = (i: number): EvidenceRecord => ({
       caseId,
       sourceUrl: `https://example.test/${i}`,
       sha256Hash: `hash-${i}`,
-      perceptualHash: "p",
+      perceptualHash: randomBytes(8).toString("hex"),
       similarityScore: null,
       isMatch: false,
       discoveredAt: new Date().toISOString(),
@@ -149,5 +153,29 @@ describe("evidence store", () => {
     const loaded = await loadEvidence(caseId);
     expect(loaded).toHaveLength(10);
     expect(new Set(loaded.map((r) => r.sourceUrl)).size).toBe(10);
+  });
+
+  it("does not persist a near-duplicate perceptual hash for the same case (repost dedup)", async () => {
+    const caseId = testCaseId();
+    caseIds.push(caseId);
+
+    const base = {
+      caseId,
+      sourceUrl: "https://example.test/original.jpg",
+      sha256Hash: "a",
+      perceptualHash: "0000000000000000",
+      similarityScore: null,
+      isMatch: false,
+      discoveredAt: new Date().toISOString(),
+    } satisfies EvidenceRecord;
+
+    await saveEvidence(base);
+    // Same image, recompressed elsewhere: different URL/sha256, but perceptual
+    // hash within REPOST_HAMMING_THRESHOLD (here, identical) of the one above.
+    await saveEvidence({ ...base, sourceUrl: "https://example.test/repost.jpg", sha256Hash: "b" });
+
+    const loaded = await loadEvidence(caseId);
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].sourceUrl).toBe("https://example.test/original.jpg");
   });
 });
