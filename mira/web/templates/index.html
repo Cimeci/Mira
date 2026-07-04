@@ -10,8 +10,17 @@
   <main class="stage">
     <header class="brand">
       <div class="mark">MIRA</div>
-      <p class="tagline">Locator · balayage d'images piloté agent</p>
+      <p class="tagline">Locator · l'agent explore à la place de la victime</p>
     </header>
+
+    <section class="scenario">
+      <p>
+        Une personne a signalé <strong>un</strong> deepfake d'elle sur un compte tiers.
+        Sous mandat, Mira explore ce compte <strong>à sa place</strong> pour retrouver
+        <strong>tous</strong> les autres médias la représentant —
+        <em>pour qu'elle n'ait pas à les chercher, ni à les revoir.</em>
+      </p>
+    </section>
 
     <form class="commandform" method="get" action="/live">
       <div class="commandbar">
@@ -21,21 +30,19 @@
           type="text"
           name="url"
           value="{{ default_url }}"
-          placeholder="mock host de démo (cible par défaut)"
+          placeholder="compte signalé (cible mandatée)"
           spellcheck="false"
           autocomplete="off"
           autofocus
-          aria-label="URL à analyser"
+          aria-label="URL à explorer"
         />
-        <button class="scan" type="submit">Explorer</button>
+        <button class="scan" type="submit">Explorer à sa place</button>
       </div>
     </form>
 
     <p class="hint">
-      <strong>Crawler agentique</strong> — Gemini explore l'URL (login, scroll), suit les
-      liens du même domaine, et collecte les images de proche en proche (borné :
-      6&nbsp;pages, profondeur&nbsp;2).
-      <br />Banc de test : <a href="/live?url={{ mock_url }}">lancer sur le mock host</a>.
+      L'agent visite chaque média du compte — <strong>l'image n'apparaît qu'en l'ouvrant</strong>,
+      donc l'agent la voit, pas la victime. Périmètre borné au compte mandaté (G-2).
     </p>
 
     <div class="mode">

@@ -13,6 +13,8 @@
       <div class="mark small">MIRA · live</div>
     </header>
 
+    <div class="shield">🛡️ La victime ne regarde pas — l'agent explore le compte signalé à sa place.</div>
+
     <div class="live-grid">
       <section class="viewport">
         <div class="vp-frame">
@@ -124,6 +126,16 @@
     function renderGallery(ev) {
       const g = document.getElementById("gallery");
       g.hidden = false;
+      if (ev.count > 0) {
+        const banner = document.createElement("div");
+        banner.className = "protect-done";
+        const others = ev.count - 1;
+        banner.innerHTML = `🛡️ L'agent a trouvé <b>${ev.count} média(s)</b> de la personne sur ce compte. ` +
+          `Elle n'a eu à en voir <b>qu'un seul</b> — ` +
+          (others > 0 ? `les <b>${others}</b> autres ont été découverts sans qu'elle ait à les chercher.` :
+                        `aucun autre à découvrir.`);
+        g.parentNode.insertBefore(banner, g);
+      }
       for (const img of ev.images) {
         const fig = document.createElement("figure");
         fig.className = "card";

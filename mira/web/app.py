@@ -53,7 +53,7 @@ def _shot_paths(url: str) -> tuple[str, str]:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     base = str(request.base_url).rstrip("/")
-    mock_url = f"{base}/mockhost/gallery.html"
+    mock_url = f"{base}/mockhost/profil.html"
     # G-12 : cible de démo (mock host) préremplie par défaut — jamais une vraie
     # plateforme. Toute autre URL est de toute façon refusée par mira.cu.guard.
     return templates.TemplateResponse(
