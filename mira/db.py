@@ -53,6 +53,16 @@ def _credentials() -> tuple[str, str]:
     return url, key
 
 
+def is_configured() -> bool:
+    """True si les credentials sont présents — la persistance (mira.store) devient
+    active ; sinon tout reste no-op et le squelette mocks tourne sans clés."""
+    try:
+        _credentials()
+    except RuntimeError:
+        return False
+    return True
+
+
 @lru_cache(maxsize=1)
 def get_client() -> Client:
     """Client Supabase partagé (singleton par process).

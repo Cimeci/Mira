@@ -40,3 +40,13 @@ def test_service_role_preferred_over_anon(monkeypatch):
     monkeypatch.setenv("SUPABASE_ANON_KEY", "anon")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service")
     assert db._credentials() == ("https://x.supabase.co", "service")
+
+
+def test_store_is_noop_without_credentials():
+    # Sans credentials (conftest coupe la DB), le store n'accumule RIEN :
+    # ni écriture réseau, ni file qui grossit en silence pendant la démo.
+    from mira import store
+
+    before = store._queue.qsize()
+    store.event_published("t-001", 0, {"kind": "done", "case_id": "t-001", "statuses": {}})
+    assert store._queue.qsize() == before
