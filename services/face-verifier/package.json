@@ -1,0 +1,21 @@
+{
+  "name": "@mira/face-verifier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node serverless face-embedding verification service for Mira (Stage 2 signal).",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vercel/node": "^3.2.0",
+    "canvas": "^2.11.2",
+    "face-api.js": "^0.22.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
