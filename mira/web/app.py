@@ -1,7 +1,14 @@
-"""API + surface de démo du locator d'images (100% Computer Use).
+"""Surface de démo du locator d'images (100% Computer Use) — BANC D'ESSAI isolé.
+
+⚠️ Périmètre (G-1/G-2/G-12) : cette surface fait tourner le Locator SANS passer par
+l'orchestrateur ni un Mandate.active — c'est un banc d'essai du Stage 1, pas le
+pipeline consenti. L'intégration réelle passera par `orchestrator.locate(mandate)`.
+En attendant, le garde-fou concret est l'allow-list de `mira.cu.guard` : par défaut
+seule la cible de démo locale (mock host) est atteignable ; toute autre URL est
+refusée en amont. On ne peut donc pas lancer un crawl sur une cible arbitraire ici.
 
 Routes :
-  GET  /            → formulaire (une ligne d'URL, préremplie sur le mock host)
+  GET  /            → formulaire (URL préremplie sur le mock host, G-12)
   GET  /live        → live view : écran de l'agent en direct pendant le scan
   GET  /stream      → flux SSE (captures + décisions de l'agent Gemini)
   POST /scrape      → variante non-streamée (rend la page résultats d'un coup)
@@ -46,11 +53,13 @@ def _shot_paths(url: str) -> tuple[str, str]:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     base = str(request.base_url).rstrip("/")
-    # Champ vide par défaut : on cible de vraies URLs. Le mock reste un banc de test.
+    mock_url = f"{base}/mockhost/gallery.html"
+    # G-12 : cible de démo (mock host) préremplie par défaut — jamais une vraie
+    # plateforme. Toute autre URL est de toute façon refusée par mira.cu.guard.
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"default_url": "", "mock_url": f"{base}/mockhost/gallery.html"},
+        {"default_url": mock_url, "mock_url": mock_url},
     )
 
 

@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 from dotenv import dotenv_values
 
+from . import guard
 from .models import ScrapedImage
 
 # Fallback si le .env ne définit pas d'identifiants : franchit le login MOCK.
@@ -53,10 +54,15 @@ def _resolve_creds(email: str | None, password: str | None) -> tuple[str, str]:
 
 
 def _validate_url(url: str) -> None:
-    """Fail fast : on n'ouvre que du http/https (pas de file://, data:, etc.)."""
+    """Fail fast à l'entrée : http/https ET host dans le périmètre autorisé (G-2/G-12).
+
+    Refuser ici garantit qu'aucune surface (POST /scrape, GET /stream) ne lance un
+    crawl sur une cible arbitraire — c'est le verrou 1/3 de mira.cu.guard.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise ValueError(f"URL invalide (attendu http/https) : {url!r}")
+    guard.require_allowed(url)
 
 
 def _dedup(raw: list[dict]) -> list[ScrapedImage]:

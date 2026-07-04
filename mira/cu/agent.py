@@ -16,6 +16,7 @@ from google import genai
 from google.genai import types
 from playwright.async_api import Page, async_playwright
 
+from . import guard
 from .actions import exec_action
 from .browser import open_page
 from .live import data_uri
@@ -131,6 +132,18 @@ async def _run_cu_loop(
             yield {"type": "action", "name": call.name, "args": _redact(str(args), email, password)}
             action_result = await exec_action(page, call.name, args)
             await page.wait_for_timeout(500)
+            # Verrou 3/3 (G-2/G-12) : re-vérifier APRÈS coup. Un clic sur un lien ou une
+            # redirection a pu sortir du périmètre sans action `navigate` explicite —
+            # on halte AVANT toute capture/exploitation de la page tierce.
+            if not guard.is_allowed(page.url):
+                yield {
+                    "type": "note",
+                    "text": (
+                        f"🔒 Garde-fou G-2 : sortie de périmètre bloquée "
+                        f"({guard.host_of(page.url)}) — arrêt de l'exploration."
+                    ),
+                }
+                return
             next_png = await page.screenshot(type="png")
             yield {
                 "type": "frame",
