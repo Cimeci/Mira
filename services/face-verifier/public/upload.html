@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mira — photo upload (proof of concept)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 2rem auto; padding: 0 1rem; }
+  img { width: 100%; border-radius: 8px; background: #111; display: none; object-fit: cover; max-height: 20rem; }
+  button { padding: 0.6rem 1rem; font-size: 1rem; margin-top: 0.75rem; margin-right: 0.5rem; }
+  #status { margin-top: 1rem; white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+  .note { font-size: 0.85rem; color: #555; margin-top: 1rem; }
+  .note.warn { color: #8a5a00; }
+</style>
+</head>
+<body>
+  <!--
+    L2 proof-of-concept, not final UI — L3 owns the real product frontend.
+    Counterpart to scan.html: same /api/enroll endpoint, but this path sends the
+    photo itself (imageBase64) and the server computes the embedding — for anyone
+    without camera access. See scan.html for the stronger-privacy alternative
+    where the photo never leaves the browser at all.
+  -->
+  <h1>Photo upload</h1>
+  <p class="note warn">
+    Unlike the face-scan page, this photo <strong>is</strong> sent to the server so
+    it can compute the embedding. It's held in memory for this one request only —
+    never written to disk, never logged — but it does leave your device. Prefer
+    <a href="/scan.html">scan.html</a> if you have a camera available.
+  </p>
+
+  <label>Case ID: <input id="caseId" value="demo-case" /></label>
+  <br />
+  <input id="fileInput" type="file" accept="image/*" />
+  <img id="preview" alt="selected photo preview" />
+
+  <div>
+    <button id="uploadBtn" disabled>Upload &amp; enroll</button>
+  </div>
+
+  <div id="status"></div>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const preview = document.getElementById("preview");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const statusEl = document.getElementById("status");
+
+    let selectedFile = null;
+
+    function log(msg) {
+      statusEl.textContent += msg + "\n";
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          // dataURL looks like "data:image/png;base64,AAAA..." — strip the prefix.
+          const result = reader.result;
+          const commaIndex = result.indexOf(",");
+          resolve(commaIndex === -1 ? result : result.slice(commaIndex + 1));
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    fileInput.addEventListener("change", () => {
+      selectedFile = fileInput.files[0] ?? null;
+      uploadBtn.disabled = !selectedFile;
+      if (selectedFile) {
+        preview.src = URL.createObjectURL(selectedFile);
+        preview.style.display = "block";
+      } else {
+        preview.style.display = "none";
+      }
+    });
+
+    uploadBtn.addEventListener("click", async () => {
+      if (!selectedFile) return;
+      uploadBtn.disabled = true;
+      try {
+        const caseId = document.getElementById("caseId").value;
+        log("Reading file…");
+        const imageBase64 = await readFileAsBase64(selectedFile);
+
+        log("Uploading photo for server-side detection…");
+        const res = await fetch("/api/enroll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ caseId, imageBase64 }),
+        });
+        const body = await res.json();
+        log(res.ok ? "Enrolled: " + JSON.stringify(body).slice(0, 80) + "…" : "Failed: " + JSON.stringify(body));
+      } catch (err) {
+        log("Error: " + err.message);
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
