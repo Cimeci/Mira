@@ -39,13 +39,21 @@ async def run_until_gate(
     *,
     log=print,
     emit: Emit = print_emitter,
-) -> list[ForensicRecord]:
-    """Première moitié du pipeline : Mandate -> Locate -> Analyze, STOP avant le gate G-7.
+) -> tuple[list[ForensicRecord], dict[str, str]]:
+    """Première moitié du pipeline : Mandate -> Locate -> Analyze -> Draft, STOP au gate G-7.
 
-    Renvoie tous les ForensicRecord produits ; ceux en Status.VERIFIED sont les
-    candidats à dispatcher. RIEN n'est envoyé ici — c'est le point d'arrêt naturel
-    pour L2 : appeler run_until_gate, montrer la notice à la victime, puis appeler
-    dispatch() APRÈS son verdict humain (résolu par POST /confirm).
+    Contrat L2 — renvoie `(records, notices)` :
+      - records : tous les ForensicRecord produits ; ceux en Status.VERIFIED sont
+        les candidats à dispatcher ;
+      - notices : dict {record.source_url: notice pré-rédigée} pour chaque VERIFIED.
+        À passer TEL QUEL à dispatch(record, mandate, notices[record.source_url])
+        pour garantir que l'aperçu montré à la victime == la notice envoyée,
+        octet pour octet (une seule rédaction).
+
+    Pour chaque VERIFIED, la notice est rédigée ICI (notifier.draft, pur) et exposée
+    à L3 via un StageEvent stage='notice' (payload {url, notice_text}) suivi du gate
+    AWAITING_CONFIRM standard. RIEN n'est envoyé — appeler dispatch() APRÈS le
+    verdict humain (résolu par POST /confirm).
     """
     _require_active(mandate)  # consent gate G-1, vérifié à l'entrée du pipeline
     # from_status=None : MANDATED est la naissance du case, il n'y a pas d'état antérieur.
@@ -58,6 +66,7 @@ async def run_until_gate(
 
     located: asyncio.Queue[MediaItem] = asyncio.Queue()
     records: list[ForensicRecord] = []
+    notices: dict[str, str] = {}
 
     # Stage 1 — Locate (in-scope only)
     await locator.locate(mandate, located, log=log, emit=emit)
@@ -69,26 +78,54 @@ async def run_until_gate(
         records.append(record)
         if record.status is Status.ESCALATED:
             # G-6 : escalade AVANT toute tentative de stockage — garanti structurellement,
-            # l'analyzer n'a rien téléchargé ni stocké sur ce cas. REJECTED s'arrête ici ;
-            # VERIFIED attend dispatch().
+            # l'analyzer n'a rien téléchargé ni stocké sur ce cas. REJECTED s'arrête ici.
             escalation.escalate(record, mandate, log=log, emit=emit)
+        elif record.status is Status.VERIFIED:
+            # Pré-gate : la notice est rédigée UNE seule fois ici, montrée en aperçu
+            # (event 'notice'), puis envoyée telle quelle par dispatch(notice=...).
+            notice = notifier.draft(record, mandate)
+            notices[record.source_url] = notice
+            # Exception documentée dans events.py : notice_text est NOTRE texte
+            # généré (template G-9), jamais du contenu victime ni des octets média.
+            # C'est ce payload qui remplit le panneau de confirmation L3.
+            emit(make_event(
+                record.case_id,
+                "notice",
+                Status.AWAITING_CONFIRM,
+                from_status=Status.VERIFIED,
+                payload={"url": record.source_url, "notice_text": notice},
+            ))
+            # Puis le gate G-7 standard (payload url seulement, règle events.py).
+            emit(make_event(
+                record.case_id,
+                "notifier",
+                Status.AWAITING_CONFIRM,
+                from_status=Status.VERIFIED,
+                payload={"url": record.source_url},
+            ))
 
-    return records
+    return records, notices
 
 
 async def dispatch(
     record: ForensicRecord,
     mandate: Mandate,
+    notice: str | None = None,
     *,
-    confirm: Callable[[str], Awaitable[bool]] = _auto_confirm,
+    confirm: Callable[[str], Awaitable[bool]],
     log=print,
     emit: Emit = print_emitter,
 ) -> NotificationRecord:
-    """Seconde moitié : Notify pour UN record VERIFIED, derrière le gate G-7.
+    """Seconde moitié : envoie la notice DÉJÀ rédigée pour UN record VERIFIED (gate G-7).
 
-    `confirm` est async ; côté L2 il attend le verdict humain (POST /confirm) sans
-    bloquer l'event loop. Fail-closed : refus ou timeout -> record DECLINED, rien
-    n'est envoyé (voir notifier.notify).
+    `notice` : le texte pré-rédigé renvoyé par run_until_gate — le passer garantit
+    que ce qui part est exactement l'aperçu validé par la victime. Si None (compat
+    appel direct), on re-rédige via notifier.draft() — pur et déterministe, donc le
+    texte reste identique à ce que le pré-gate aurait montré.
+    `confirm` est OBLIGATOIRE (pas de défaut) : un appel L2 qui l'oublie doit
+    échouer en TypeError, jamais auto-envoyer (G-7). Seul run() — la CLI — garde
+    _auto_confirm et le transmet explicitement. Fail-closed : refus ou timeout ->
+    record DECLINED, rien n'est envoyé (voir notifier.send).
     """
     # G-1 re-vérifié : du temps humain s'écoule entre le gate et le verdict,
     # le mandat a pu être révoqué entre-temps.
@@ -98,7 +135,22 @@ async def dispatch(
         raise ValueError(
             f"dispatch attend un record VERIFIED, reçu {record.status} ({record.case_id})"
         )
-    return await notifier.notify(record, mandate, confirm=confirm, log=log, emit=emit)
+    # Défense en profondeur avant envoi externe : le record doit appartenir AU mandat
+    # qui autorise l'envoi — un mismatch = notifier au nom d'une autre victime.
+    if record.case_id != mandate.case_id:
+        raise ValueError(
+            f"dispatch refusé : record {record.case_id!r} n'appartient pas au mandat "
+            f"{mandate.case_id!r} (authorization mismatch)"
+        )
+    # G-2 re-vérifié au dernier point de sortie : rien ne part pour une URL hors du
+    # périmètre consenti, même si le Locator reste le garant principal.
+    if not locator.is_in_scope(record.source_url, mandate.scope_urls):
+        raise ValueError(
+            f"dispatch refusé : {record.source_url} hors scope du mandat (G-2)"
+        )
+    if notice is None:
+        notice = notifier.draft(record, mandate)
+    return await notifier.send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
 
 
 async def run(
@@ -116,11 +168,20 @@ async def run(
     `emit` reçoit un StageEvent à chaque transition d'état (contrat : mira/events.py).
     `log` reste le canal texte legacy des messages hors transition (ex. rejet G-2).
     """
-    records = await run_until_gate(mandate, log=log, emit=emit)
+    records, notices = await run_until_gate(mandate, log=log, emit=emit)
     results: list = list(records)
     for record in records:
         if record.status is Status.VERIFIED:
+            # La notice pré-rédigée est transmise : une seule rédaction par record,
+            # preview == envoi garanti aussi sur le chemin CLI.
             results.append(
-                await dispatch(record, mandate, confirm=confirm, log=log, emit=emit)
+                await dispatch(
+                    record,
+                    mandate,
+                    notices[record.source_url],
+                    confirm=confirm,
+                    log=log,
+                    emit=emit,
+                )
             )
     return results
