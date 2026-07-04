@@ -13,3 +13,6 @@ scratch/
 __pycache__/
 .claude/settings.local.json
 .mira_consent/
+
+# Captures runtime du locator (générées à chaque scan, jamais versionnées)
+mira/web/static/shots/

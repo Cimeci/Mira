@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connexion — @sample_profile</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: radial-gradient(800px 500px at 50% 0%, #16202e, #0b0f14 70%);
+      color: #e6edf3; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .card {
+      width: min(380px, 92vw); background: #10161f; border: 1px solid #1c2530;
+      border-radius: 18px; padding: 32px 28px; box-shadow: 0 30px 60px -30px #000;
+    }
+    .logo {
+      width: 48px; height: 48px; border-radius: 12px; margin: 0 auto 18px;
+      background: conic-gradient(from 210deg, #2dd4bf, #a78bfa, #fb7185, #2dd4bf);
+    }
+    h1 { text-align: center; font-size: 1.2rem; margin: 0 0 4px; }
+    .sub { text-align: center; color: #7d8590; font-size: .85rem; margin: 0 0 22px; }
+    label { display: block; font-size: .78rem; color: #adbac7; margin: 14px 0 6px; }
+    input {
+      width: 100%; padding: 11px 12px; border-radius: 10px;
+      background: #0b0f14; border: 1px solid #263041; color: #e6edf3; font-size: .95rem;
+    }
+    input:focus { outline: none; border-color: #2dd4bf; box-shadow: 0 0 0 3px rgba(45,212,191,.15); }
+    button {
+      width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 10px; cursor: pointer;
+      background: #2dd4bf; color: #08121a; font-weight: 650; font-size: .95rem;
+    }
+    button:hover { filter: brightness(1.07); }
+    .err { color: #fb7185; font-size: .8rem; margin-top: 12px; min-height: 1em; text-align: center; }
+    .hint {
+      margin-top: 22px; padding-top: 16px; border-top: 1px solid #1c2530;
+      font-family: ui-monospace, Menlo, monospace; font-size: .72rem; color: #6b7684; text-align: center; line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <form class="card" id="loginForm" autocomplete="off">
+    <div class="logo"></div>
+    <h1>Se connecter</h1>
+    <p class="sub">Contenu réservé aux membres</p>
+
+    <label for="email">Adresse e-mail</label>
+    <input id="email" name="email" type="email" placeholder="vous@exemple.com" />
+
+    <label for="password">Mot de passe</label>
+    <input id="password" name="password" type="password" placeholder="••••••••" />
+
+    <button type="submit">Se connecter</button>
+    <div class="err" id="err"></div>
+
+    <div class="hint">
+      mock host · aucune vraie authentification<br />
+      démo : demo@project-mira.example / mira-demo
+    </div>
+  </form>
+
+  <script>
+    // Login FACTICE : aucune sécurité réelle. Accepte un e-mail plausible +
+    // un mot de passe non vide, puis laisse entrer. C'est un mur de démo, pas un vrai gate.
+    document.getElementById('loginForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const err = document.getElementById('err');
+      if (!email.includes('@') || password.length < 4) {
+        err.textContent = 'Identifiants invalides.';
+        return;
+      }
+      window.location.href = 'gallery.html';
+    });
+  </script>
+</body>
+</html>

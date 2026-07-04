@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mira — Locator</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="stage">
+    <header class="brand">
+      <div class="mark">MIRA</div>
+      <p class="tagline">Locator · balayage d'images piloté agent</p>
+    </header>
+
+    <form class="commandbar" method="post" action="/scrape">
+      <span class="prompt">▸</span>
+      <input
+        class="url-input"
+        type="text"
+        name="url"
+        value="{{ default_url }}"
+        spellcheck="false"
+        autocomplete="off"
+        autofocus
+        aria-label="URL à analyser"
+      />
+      <button class="scan" type="submit">Scanner</button>
+    </form>
+
+    <p class="hint">
+      L'agent ouvre l'URL, scrolle pour charger toutes les vignettes, puis collecte les images.
+      <br />Cible préremplie : le <strong>mock host</strong> de démo — <a href="/mockhost/" target="_blank" rel="noreferrer">le voir</a>.
+    </p>
+
+    <div class="mode">
+      <span class="dot"></span> moteur : <strong>déterministe</strong> (Playwright) — Gemini Computer Use se branche par-dessus
+    </div>
+  </main>
+</body>
+</html>

@@ -11,6 +11,15 @@
 # resend                 # Stage 3 — dispatch email (primaire)
 # sendgrid               # Stage 3 — dispatch email (fallback)
 
+# --- surface web + locator CU (lane Ilan) ---
+fastapi                  # API + surface de démo
+uvicorn[standard]        # serveur ASGI
+jinja2                   # templates (index / results)
+python-multipart         # parsing du form POST /scrape
+playwright               # navigateur du scraper (puis: playwright install chromium)
+google-genai             # Gemini Computer Use (couche à brancher)
+python-dotenv            # chargement .env.local
+
 # --- dev ---
 ruff
 pytest
