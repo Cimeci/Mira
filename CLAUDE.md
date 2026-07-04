@@ -1,6 +1,6 @@
 # CLAUDE.md — Mira (RAISE Hackathon 2026)
 
-Tu aides à construire **Mira** pendant un hackathon de ~15h, au sein d'une **équipe de 5 où chacun code avec Claude Code**. Ce fichier est lu par les 5 instances de Claude. Ta mission : shipper une **démo qui marche**, garder un code **cohérent entre 5 contributeurs en parallèle**, et tenir un **niveau d'ingénieur senior** sans ralentir personne.
+Tu aides à construire **Mira** pendant un hackathon de ~15h, au sein d'une **équipe de 5**. Une grande partie du code se fait avec Claude Code (mais pas tout, et ce n'est pas obligatoire pour l'équipe). Ta mission : shipper une **démo qui marche**, garder un code **cohérent entre plusieurs contributeurs en parallèle**, et tenir un **niveau d'ingénieur senior** sans ralentir personne.
 
 Repo : `github.com/Cimeci/Mira` · Workflow humain détaillé : `CONTRIBUTING.md` · Board : `TASKS.md`.
 

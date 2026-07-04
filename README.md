@@ -3,7 +3,7 @@
 > Workspace de build, équipe de 5. Ship une démo qui **marche**. Submission **dimanche 12h00**.
 > Repo : `github.com/Cimeci/Mira` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
 
-**On code tous avec Claude Code.** Ouvre Claude Code dans ce dossier : il lit `CLAUDE.md` automatiquement et connaît d'entrée toutes les règles, le workflow git et le standard de code. Dis-lui juste ta lane (Core/Backend/UI/Infra/Démo) au début de session.
+**Une grande partie du code se fait avec Claude Code** (pas obligatoire). Si tu l'utilises : ouvre-le dans ce dossier, il lit `CLAUDE.md` automatiquement et connaît d'entrée toutes les règles, le workflow git et le standard de code. Dis-lui juste ta lane (Core/Backend/UI/Infra/Démo). Les mêmes règles s'appliquent si tu codes à la main.
 
 ## ⏱️ Timeline (4–5 juil, venue ferme 22h sam / rouvre 7h dim)
 
