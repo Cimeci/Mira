@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mira — Research Intelligence Brief | RAISE 2026</title>
+<style>
+  :root {
+    --bg:         #0C1525;
+    --surface:    #131E32;
+    --surface-2:  #1A2840;
+    --border:     #243452;
+    --text:       #D6E2F0;
+    --text-2:     #6A82A0;
+    --text-3:     #3D5272;
+    --accent:     #2E85D4;
+    --accent-dim: #142A48;
+    --good:       #28A86A;
+    --good-dim:   #0A2E1C;
+    --warn:       #D4881C;
+    --warn-dim:   #352000;
+    --bad:        #C43C3C;
+    --bad-dim:    #331010;
+    --mod:        #8B6FD4;
+    --mod-dim:    #1E1238;
+    --label:      #3D5272;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:         #EBF0F7;
+      --surface:    #F8FAFD;
+      --surface-2:  #E2EAF4;
+      --border:     #C4D0E0;
+      --text:       #182030;
+      --text-2:     #4A5E78;
+      --text-3:     #8099B8;
+      --accent:     #1868B8;
+      --accent-dim: #D4E6F8;
+      --good:       #16784A;
+      --good-dim:   #D0F0E2;
+      --warn:       #A06010;
+      --warn-dim:   #FDEFD4;
+      --bad:        #A02828;
+      --bad-dim:    #FFE0E0;
+      --mod:        #5A40B0;
+      --mod-dim:    #EAE4FC;
+      --label:      #8099B8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:         #0C1525;
+    --surface:    #131E32;
+    --surface-2:  #1A2840;
+    --border:     #243452;
+    --text:       #D6E2F0;
+    --text-2:     #6A82A0;
+    --text-3:     #3D5272;
+    --accent:     #2E85D4;
+    --accent-dim: #142A48;
+    --good:       #28A86A;
+    --good-dim:   #0A2E1C;
+    --warn:       #D4881C;
+    --warn-dim:   #352000;
+    --bad:        #C43C3C;
+    --bad-dim:    #331010;
+    --mod:        #8B6FD4;
+    --mod-dim:    #1E1238;
+    --label:      #3D5272;
+  }
+  :root[data-theme="light"] {
+    --bg:         #EBF0F7;
+    --surface:    #F8FAFD;
+    --surface-2:  #E2EAF4;
+    --border:     #C4D0E0;
+    --text:       #182030;
+    --text-2:     #4A5E78;
+    --text-3:     #8099B8;
+    --accent:     #1868B8;
+    --accent-dim: #D4E6F8;
+    --good:       #16784A;
+    --good-dim:   #D0F0E2;
+    --warn:       #A06010;
+    --warn-dim:   #FDEFD4;
+    --bad:        #A02828;
+    --bad-dim:    #FFE0E0;
+    --mod:        #5A40B0;
+    --mod-dim:    #EAE4FC;
+    --label:      #8099B8;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { background: var(--bg); color: var(--text); font-size: 16px; }
+
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    line-height: 1.65;
+    background: var(--bg);
+    color: var(--text);
+    padding: 0 1.25rem 6rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  /* ── Classification bar ── */
+  .classify-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3.5rem;
+    gap: 1rem;
+  }
+  .classify-tag {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 0.25em 0.65em;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+  }
+  .classify-meta {
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    text-align: right;
+  }
+
+  /* ── Hero / Title ── */
+  .hero {
+    padding: 0.5rem 0 3.5rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3.5rem;
+  }
+  .hero-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 1.1rem;
+  }
+  .hero h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 400;
+    line-height: 1.18;
+    color: var(--text);
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+    margin-bottom: 1.4rem;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .hero-summary {
+    font-size: 1.05rem;
+    color: var(--text-2);
+    max-width: 640px;
+    line-height: 1.7;
+  }
+
+  /* ── Section ── */
+  section {
+    margin-bottom: 3.5rem;
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--label);
+    margin-bottom: 0.9rem;
+    font-family: 'Courier New', monospace;
+  }
+  h2 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1.55rem;
+    font-weight: 400;
+    color: var(--text);
+    text-wrap: balance;
+    margin-bottom: 1.2rem;
+    line-height: 1.3;
+  }
+  h3 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-2);
+    margin: 1.8rem 0 0.75rem;
+  }
+  p {
+    color: var(--text-2);
+    margin-bottom: 0.85rem;
+  }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── Tables ── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin: 1.25rem 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    min-width: 560px;
+  }
+  thead th {
+    background: var(--surface-2);
+    color: var(--text-3);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.65rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface); }
+  td {
+    padding: 0.75rem 1rem;
+    color: var(--text-2);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  td:first-child {
+    color: var(--text);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  td.mono {
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+  }
+
+  /* ── Chips / Pills ── */
+  .chip {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.2em 0.6em;
+    border-radius: 2px;
+    white-space: nowrap;
+    font-family: 'Courier New', monospace;
+  }
+  .chip-good    { background: var(--good-dim);  color: var(--good); }
+  .chip-warn    { background: var(--warn-dim);  color: var(--warn); }
+  .chip-bad     { background: var(--bad-dim);   color: var(--bad);  }
+  .chip-mod     { background: var(--mod-dim);   color: var(--mod);  }
+  .chip-accent  { background: var(--accent-dim); color: var(--accent); }
+
+  /* ── Failure cards ── */
+  .failures {
+    display: grid;
+    gap: 0.75rem;
+    margin: 1.25rem 0;
+  }
+  .failure-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--bad);
+    border-radius: 3px;
+    padding: 0.9rem 1.1rem;
+  }
+  .failure-card h4 {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.35rem;
+    letter-spacing: 0.04em;
+  }
+  .failure-card p {
+    font-size: 0.875rem;
+    color: var(--text-2);
+    margin: 0;
+    line-height: 1.55;
+  }
+
+  /* ── Architecture flow ── */
+  .arch {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin: 1.25rem 0;
+  }
+  .arch-layer {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.6rem;
+  }
+  .arch-layer:last-child { margin-bottom: 0; }
+  .arch-connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 2.5rem;
+    padding-top: 0.2rem;
+  }
+  .arch-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
+  .arch-icon.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .arch-icon.human  { border-color: var(--warn);   color: var(--warn);   background: var(--warn-dim);  }
+  .arch-icon.auto   { border-color: var(--good);   color: var(--good);   background: var(--good-dim);  }
+  .arch-line {
+    width: 1px;
+    flex: 1;
+    min-height: 1rem;
+    background: var(--border);
+    margin-top: 0.3rem;
+  }
+  .arch-body {
+    flex: 1;
+    padding-bottom: 1rem;
+  }
+  .arch-body h4 {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.2rem;
+    letter-spacing: 0.03em;
+  }
+  .arch-body p {
+    font-size: 0.82rem;
+    color: var(--text-2);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .arch-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+  }
+
+  /* ── Gap list ── */
+  .gap-list {
+    list-style: none;
+    margin: 1rem 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .gap-list li {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.875rem;
+    color: var(--text-2);
+  }
+  .gap-list li strong {
+    color: var(--text);
+    display: block;
+    font-size: 0.82rem;
+    margin-bottom: 0.15rem;
+  }
+  .gap-num {
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+    padding-top: 0.05rem;
+    width: 1.2rem;
+  }
+
+  /* ── Demo path ── */
+  .demo-steps {
+    display: grid;
+    gap: 0.75rem;
+    margin: 1.25rem 0;
+    counter-reset: demo;
+  }
+  .demo-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1rem 1.2rem 1rem 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  .demo-n {
+    font-family: Georgia, serif;
+    font-size: 1.8rem;
+    line-height: 1;
+    color: var(--border);
+    flex-shrink: 0;
+    width: 1.6rem;
+    font-weight: 400;
+  }
+  .demo-body h4 {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+  }
+  .demo-body p {
+    font-size: 0.82rem;
+    color: var(--text-2);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  /* ── Divider ── */
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0;
+  }
+
+  /* ── Sources ── */
+  .sources {
+    font-size: 0.78rem;
+    color: var(--text-3);
+  }
+  .sources ol {
+    padding-left: 1.4rem;
+    display: grid;
+    gap: 0.3rem;
+    margin-top: 0.75rem;
+  }
+  .sources a {
+    color: var(--text-3);
+    text-decoration: none;
+    word-break: break-all;
+  }
+  .sources a:hover { color: var(--accent); }
+
+  /* ── Verdict banner ── */
+  .verdict {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 1.2rem 1.4rem;
+    margin: 1.25rem 0;
+  }
+  .verdict h4 {
+    font-family: Georgia, serif;
+    font-size: 1.05rem;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 0.4rem;
+    line-height: 1.4;
+  }
+  .verdict p {
+    font-size: 0.875rem;
+    color: var(--text-2);
+    margin: 0;
+  }
+
+  @media (max-width: 480px) {
+    .classify-bar { flex-direction: column; align-items: flex-start; }
+    .classify-meta { text-align: left; }
+    .arch-layer { flex-direction: row; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="classify-bar">
+  <span class="classify-tag">Internal Research Brief</span>
+  <span class="classify-meta">MIRA · RAISE Hackathon 2026 · 4–5 Jul 2026<br>L5 Integration / Demo</span>
+</div>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <p class="hero-eyebrow">Project Mira — Feasibility &amp; Competitive Research</p>
+  <h1>Agentic deepfake takedown:<br><em>what exists, what fails,</em><br>what we build.</h1>
+  <p class="hero-summary">
+    A structured brief on the current landscape of non-consensual image (NCII) reporting tools,
+    the structural failures no existing solution has addressed, and an honest assessment of
+    what Gemini Computer Use can and cannot do for this use case in 15 hours.
+  </p>
+</div>
+
+<!-- ── EXISTING SOLUTIONS ── -->
+<section>
+  <p class="section-label">I — Competitive Landscape</p>
+  <h2>What already exists</h2>
+  <p>Nine tools cover portions of this space. None of them are agentic, none handle deepfakes without a hash of an original image, and none close the loop from discovery through multi-authority submission automatically.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th>Operator</th>
+          <th>Core Mechanism</th>
+          <th>Deepfake Support</th>
+          <th>Coverage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>StopNCII.org</td>
+          <td>SWGfL / UK</td>
+          <td>PDQ/PhotoDNA hash, shared with ~15 partner platforms</td>
+          <td><span class="chip chip-bad">None</span></td>
+          <td>~15 platforms</td>
+        </tr>
+        <tr>
+          <td>Take It Down</td>
+          <td>NCMEC / US</td>
+          <td>Same hash model, minors only</td>
+          <td><span class="chip chip-bad">None</span></td>
+          <td>5 platforms</td>
+        </tr>
+        <tr>
+          <td>Revenge Porn Helpline</td>
+          <td>SWGfL / UK</td>
+          <td>Human caseworkers + StopNCII</td>
+          <td><span class="chip chip-bad">None</span></td>
+          <td>UK only</td>
+        </tr>
+        <tr>
+          <td>CCRI Helpline</td>
+          <td>CCRI / US</td>
+          <td>Crisis triage + legal referrals</td>
+          <td><span class="chip chip-warn">Partial</span></td>
+          <td>US adults</td>
+        </tr>
+        <tr>
+          <td>Google Image Removal</td>
+          <td>Google</td>
+          <td>Form-based deindexing</td>
+          <td><span class="chip chip-warn">Partial</span></td>
+          <td>Google Search only</td>
+        </tr>
+        <tr>
+          <td>Meta NCII Flow</td>
+          <td>Meta</td>
+          <td>StopNCII hashing + AI classifiers</td>
+          <td><span class="chip chip-bad">None</span></td>
+          <td>Meta platforms only</td>
+        </tr>
+        <tr>
+          <td>IWF Hash List</td>
+          <td>IWF / UK</td>
+          <td>Hash + URL lists to 220+ members</td>
+          <td><span class="chip chip-warn">Expanding</span></td>
+          <td>220+ platforms</td>
+        </tr>
+        <tr>
+          <td>Commercial removers</td>
+          <td>Removify, etc.</td>
+          <td>Reverse image search + DMCA notices</td>
+          <td><span class="chip chip-bad">None</span></td>
+          <td>Paid, slow</td>
+        </tr>
+        <tr>
+          <td>Protect Privacy AI</td>
+          <td>May 2026, US</td>
+          <td>TAKE IT DOWN Act notice filing</td>
+          <td><span class="chip chip-warn">Unknown</span></td>
+          <td>US only</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── 5 FAILURES ── -->
+<section>
+  <p class="section-label">II — Why They All Fail</p>
+  <h2>Five structural failures no existing tool has solved</h2>
+
+  <div class="failures">
+    <div class="failure-card">
+      <h4>A. The hash dependency problem</h4>
+      <p>Every major tool requires the victim to possess the original image to generate a hash. Deepfakes are fabricated — victims have nothing to hash. A minor crop or re-encoding changes the hash, and abusers can generate 100 perceptually-distinct variations in 30 seconds.</p>
+    </div>
+    <div class="failure-card">
+      <h4>B. Fragmented, voluntary platform coverage</h4>
+      <p>StopNCII partners with ~15 platforms out of hundreds of relevant hosts. Telegram — the primary distribution channel for deepfake NCII at scale — is completely outside the system. Dark web and re-hosting sites regenerate under new domains within hours.</p>
+    </div>
+    <div class="failure-card">
+      <h4>C. Catastrophic victim burden</h4>
+      <p>No tool proactively monitors for a victim's likeness. Every system requires victim initiation, but victims often don't know content exists until it has already spread. The TAKE IT DOWN Act requires a separate written notice to each platform, per URL, while the victim is in acute distress.</p>
+    </div>
+    <div class="failure-card">
+      <h4>D. Geographic and legal patchwork</h4>
+      <p>TAKE IT DOWN Act is US-only, effective May 2026. Pre-2025 state laws excluded AI-generated content. Non-US hosting platforms ignore US law. There is no global equivalent.</p>
+    </div>
+    <div class="failure-card">
+      <h4>E. Speed mismatch</h4>
+      <p>Deepfake content spreads to tens of thousands in minutes. Human review and platform removal cycles operate in hours to days. The 48-hour window is aspirational; no automated compliance monitoring exists.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── GAPS ── -->
+<section>
+  <p class="section-label">III — Opportunity Space</p>
+  <h2>Eight gaps an agentic workflow could fill</h2>
+  <p>No existing system combines proactive monitoring, content-level detection, automated notice filing, and compliance tracking into a single victim-facing pipeline. These are the specific gaps we can address.</p>
+
+  <ul class="gap-list">
+    <li>
+      <span class="gap-num">01</span>
+      <div>
+        <strong>Proactive monitoring without the original image</strong>
+        Face-embedding + reverse image search on a recurring schedule across known distribution channels — no hash of an original needed.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">02</span>
+      <div>
+        <strong>Content-level deepfake detection</strong>
+        AI classifiers for GAN/diffusion artifacts that work on never-before-seen content, not just hash matches.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">03</span>
+      <div>
+        <strong>Automated multi-platform notice filing</strong>
+        Parallel TAKE IT DOWN Act + DMCA notices to all relevant platforms from a single victim input, properly formatted per each platform's requirements.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">04</span>
+      <div>
+        <strong>Forensic evidence collection</strong>
+        Timestamped screenshots, metadata capture, cryptographic signing for legal admissibility — automated, not manual.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">05</span>
+      <div>
+        <strong>Re-hosting monitoring loop</strong>
+        Persistent agent that detects re-uploads after takedown and automatically re-files — the most common failure mode today.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">06</span>
+      <div>
+        <strong>Platform compliance tracking + FTC escalation</strong>
+        Verify 48-hour removal window; auto-generate FTC complaints when platforms miss the deadline.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">07</span>
+      <div>
+        <strong>Multilingual intake</strong>
+        LLM-powered triage in any language with jurisdiction-specific legal guidance. No equivalent exists today.
+      </div>
+    </li>
+    <li>
+      <span class="gap-num">08</span>
+      <div>
+        <strong>Unified case dashboard</strong>
+        Persistent state across all platforms, URLs, removal statuses, and legal filings — one place instead of dozens of browser tabs.
+      </div>
+    </li>
+  </ul>
+</section>
+
+<!-- ── GEMINI COMPUTER USE ── -->
+<section>
+  <p class="section-label">IV — Technology Assessment</p>
+  <h2>What Gemini Computer Use can actually do</h2>
+
+  <p>As of June 2026, computer use is a native capability in <span class="chip chip-accent">gemini-3.5-flash</span> alongside function calling and Search grounding. The model takes screenshots of a live browser, reasons about what it sees, and emits concrete UI actions — clicks, keyboard input, scrolling. It is not DOM-scraping; it operates visually.</p>
+
+  <h3>Feasibility by workflow step</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Workflow Step</th>
+          <th>Verdict</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Navigate social media platforms, find misused images</td>
+          <td><span class="chip chip-mod">Moderate</span></td>
+          <td>Works technically; human needed to confirm victim identity</td>
+        </tr>
+        <tr>
+          <td>Navigate scam/forum sites to document misuse</td>
+          <td><span class="chip chip-good">High</span></td>
+          <td>Standard web navigation; no special restrictions</td>
+        </tr>
+        <tr>
+          <td>Navigate adult/porn platforms</td>
+          <td><span class="chip chip-bad">Blocked</span></td>
+          <td>Safety filters refuse to process explicit screenshots — requires human-in-loop</td>
+        </tr>
+        <tr>
+          <td>Fill platform reporting forms (Instagram, X, Reddit…)</td>
+          <td><span class="chip chip-good">High</span></td>
+          <td>Well-scoped structured task — Gemini's core strength. Up to 10 parallel sessions.</td>
+        </tr>
+        <tr>
+          <td>Submit DMCA takedown requests</td>
+          <td><span class="chip chip-good">High</span></td>
+          <td>Form-filling with known fields; strong use case</td>
+        </tr>
+        <tr>
+          <td>File TAKE IT DOWN Act notices</td>
+          <td><span class="chip chip-good">High</span></td>
+          <td>Same as DMCA; structured form with defined legal fields</td>
+        </tr>
+        <tr>
+          <td>Handle CAPTCHAs</td>
+          <td><span class="chip chip-bad">Blocked</span></td>
+          <td>Policy-prohibited; requires human confirmation step at each CAPTCHA</td>
+        </tr>
+        <tr>
+          <td>Auto-accept Terms of Service</td>
+          <td><span class="chip chip-bad">Blocked</span></td>
+          <td>Policy-prohibited; agent pauses, human confirms</td>
+        </tr>
+        <tr>
+          <td>Submit to foreign authorities with web portals</td>
+          <td><span class="chip chip-mod">Moderate</span></td>
+          <td>Technically feasible per jurisdiction; requires per-country workflow config</td>
+        </tr>
+        <tr>
+          <td>Fully autonomous end-to-end (no human)</td>
+          <td><span class="chip chip-bad">Low</span></td>
+          <td>CAPTCHA breaks + ToS breaks + adult content breaks require human steps</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="verdict">
+    <h4>Gemini Computer Use is the right tool for the form-filling and portal-submission layer. It cannot be the whole pipeline.</h4>
+    <p>The adult content site navigation problem is not purely a safety-filter issue — it is a policy and legal liability problem for Google. The right answer is a human-in-the-loop hybrid: human confirms which URLs to act on, agent automates every submission from that point forward.</p>
+  </div>
+</section>
+
+<!-- ── ARCHITECTURE ── -->
+<section>
+  <p class="section-label">V — What We Build</p>
+  <h2>Proposed architecture</h2>
+
+  <div class="arch">
+    <div class="arch-layer">
+      <div class="arch-connector">
+        <div class="arch-icon active">01</div>
+        <div class="arch-line"></div>
+      </div>
+      <div class="arch-body">
+        <h4>Victim Intake</h4>
+        <p>Upload reference photo(s) → face embedding generated client-side. No image stored on server. Victim provides name, country, consent.</p>
+        <div class="arch-tags">
+          <span class="chip chip-accent">Next.js</span>
+          <span class="chip chip-accent">Google Vision API</span>
+        </div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-connector">
+        <div class="arch-icon auto">02</div>
+        <div class="arch-line"></div>
+      </div>
+      <div class="arch-body">
+        <h4>Discovery Layer — Automated</h4>
+        <p>Reverse image search APIs + Gemini Computer Use navigates social media, forums, image hosting sites. Returns list of URLs with screenshots as evidence.</p>
+        <div class="arch-tags">
+          <span class="chip chip-good">Automated</span>
+          <span class="chip chip-accent">Gemini Computer Use</span>
+          <span class="chip chip-accent">Playwright/CDP</span>
+        </div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-connector">
+        <div class="arch-icon human">03</div>
+        <div class="arch-line"></div>
+      </div>
+      <div class="arch-body">
+        <h4>Human Confirmation — Required</h4>
+        <p>Victim reviews flagged URLs, confirms which to act on. This is also where adult site content gets human review — bypasses the safety filter problem and is the right UX: victims should approve actions taken in their name.</p>
+        <div class="arch-tags">
+          <span class="chip chip-warn">Human in loop</span>
+          <span class="chip chip-warn">~30 seconds</span>
+        </div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-connector">
+        <div class="arch-icon auto">04</div>
+        <div class="arch-line"></div>
+      </div>
+      <div class="arch-body">
+        <h4>Agentic Reporting Layer — Automated</h4>
+        <p>Gemini Computer Use drives parallel sessions: platform takedowns (Instagram/X/Reddit/TikTok), DMCA notices, TAKE IT DOWN Act notices, country-specific authority forms. Evidence package generated with cryptographic hash.</p>
+        <div class="arch-tags">
+          <span class="chip chip-good">Automated</span>
+          <span class="chip chip-accent">10 parallel sessions</span>
+          <span class="chip chip-accent">Vertex AI</span>
+        </div>
+      </div>
+    </div>
+    <div class="arch-layer">
+      <div class="arch-connector">
+        <div class="arch-icon active">05</div>
+      </div>
+      <div class="arch-body">
+        <h4>Tracking &amp; Compliance Loop</h4>
+        <p>48h compliance monitoring per URL, auto-re-file on re-hosting, FTC escalation when platforms miss deadline. Unified case dashboard with status per platform.</p>
+        <div class="arch-tags">
+          <span class="chip chip-good">Automated</span>
+          <span class="chip chip-accent">Case dashboard</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── DIFFERENTIATION ── -->
+<section>
+  <p class="section-label">VI — Competitive Position</p>
+  <h2>Why this is different from Protect Privacy AI</h2>
+  <p>Protect Privacy AI (launched May 2026) is the closest existing analog. It is US-only, focused on TAKE IT DOWN Act compliance, and requires victims to already know where their content is. Here is the gap:</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Protect Privacy AI</th>
+          <th>Mira</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Content detection</td>
+          <td>Victim must find URLs themselves</td>
+          <td>Proactive monitoring via face embeddings — no hash of original needed</td>
+        </tr>
+        <tr>
+          <td>Deepfake support</td>
+          <td>Unknown</td>
+          <td>Face-based detection works on fabricated content</td>
+        </tr>
+        <tr>
+          <td>Geographic scope</td>
+          <td>US only (TAKE IT DOWN Act)</td>
+          <td>Multi-country authority mapping</td>
+        </tr>
+        <tr>
+          <td>Agentic automation</td>
+          <td>Unknown mechanism</td>
+          <td>Gemini Computer Use driving form submissions in parallel</td>
+        </tr>
+        <tr>
+          <td>Re-hosting monitoring</td>
+          <td>Not documented</td>
+          <td>Persistent agent loop re-files automatically</td>
+        </tr>
+        <tr>
+          <td>Adult site coverage</td>
+          <td>Unknown</td>
+          <td>Human-in-loop hybrid — honest about the limit, right UX anyway</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── HACKATHON DEMO PATH ── -->
+<section>
+  <p class="section-label">VII — Hackathon Verdict</p>
+  <h2>The 3-minute jury demo path</h2>
+  <p>Demo score is 50% of total. Everything below is chosen because it is observable in real time by a jury, not because it's the most technically interesting part.</p>
+
+  <div class="demo-steps">
+    <div class="demo-step">
+      <div class="demo-n">1</div>
+      <div class="demo-body">
+        <h4>Victim uploads a reference photo</h4>
+        <p>Face embedding generated in the browser. Victim confirms: "Search for misuse of my likeness." Simple, human-readable intake form — nothing that looks like a dev tool.</p>
+      </div>
+    </div>
+    <div class="demo-step">
+      <div class="demo-n">2</div>
+      <div class="demo-body">
+        <h4>Agent discovers a matching URL and collects evidence</h4>
+        <p>Gemini Computer Use navigates a pre-seeded demo target (reliable, no live adult content). Screenshot captured, timestamped, hash signed. Victim reviews and approves the takedown batch — one click.</p>
+      </div>
+    </div>
+    <div class="demo-step">
+      <div class="demo-n">3</div>
+      <div class="demo-body">
+        <h4>Live form submission — screen visible to jury</h4>
+        <p>The agent opens a real reporting form, navigates fields, submits. Jury watches the browser controlled by the agent in real time. Dashboard updates: case open, submission logged, 48h countdown started.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>What to cut for the hackathon</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Decision</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Adult site navigation</td>
+          <td><span class="chip chip-warn">Human-in-loop</span></td>
+          <td>Known policy blocker — frame as a deliberate UX choice, not a gap</td>
+        </tr>
+        <tr>
+          <td>Real-time re-hosting monitor</td>
+          <td><span class="chip chip-warn">Fake it</span></td>
+          <td>Demo with a pre-staged re-upload; real loop takes hours to show</td>
+        </tr>
+        <tr>
+          <td>Full country authority mapping</td>
+          <td><span class="chip chip-warn">Scope to 2–3</span></td>
+          <td>Show France, US, UK — enough to prove the concept</td>
+        </tr>
+        <tr>
+          <td>FTC escalation flow</td>
+          <td><span class="chip chip-warn">Dashboard only</span></td>
+          <td>Show the timer and the "escalate" button; don't wire the actual FTC form for demo</td>
+        </tr>
+        <tr>
+          <td>Deepfake classifier</td>
+          <td><span class="chip chip-bad">Skip</span></td>
+          <td>Too much time to train; say "pluggable" in the pitch — jury will believe it</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr>
+
+<!-- ── SOURCES ── -->
+<div class="sources">
+  <p class="section-label">Sources</p>
+  <ol>
+    <li>StopNCII — <a href="https://stopncii.org/how-it-works/">stopncii.org/how-it-works</a></li>
+    <li>NCMEC Take It Down — <a href="https://takeitdown.ncmec.org/faq/">takeitdown.ncmec.org</a></li>
+    <li>RPH 2024 Annual Report — <a href="https://swgfl.org.uk/research/revenge-porn-helpline-2024-annual-report/">swgfl.org.uk</a></li>
+    <li>FTC TAKE IT DOWN Act enforcement — <a href="https://www.ftc.gov/business-guidance/blog/2026/05/take-it-down-act-enforcement-starts-now">ftc.gov</a></li>
+    <li>Gemini Computer Use docs — <a href="https://ai.google.dev/gemini-api/docs/computer-use">ai.google.dev</a></li>
+    <li>Gemini 2.5 Computer Use announcement — <a href="https://blog.google/innovation-and-ai/models-and-research/google-deepmind/gemini-computer-use-model/">blog.google</a></li>
+    <li>Protect Privacy AI launch — <a href="https://www.prnewswire.com/news-releases/protect-privacy-ai-launches-service-to-help-survivors-of-image-based-sexual-abuse-exercise-new-federal-rights-under-the-take-it-down-act-302776204.html">prnewswire.com</a></li>
+    <li>AIG-NCII Governance paper — <a href="https://arxiv.org/pdf/2504.17663">arxiv.org/pdf/2504.17663</a></li>
+    <li>Perceptual hash evasion (Imperial) — <a href="https://aisp.doc.ic.ac.uk/blog/deephash-not-robust-to-detection-avoidance/">aisp.doc.ic.ac.uk</a></li>
+    <li>ISD Deepfake Ecosystem — <a href="https://www.isdglobal.org/digital-dispatch/the-ecosystem-of-nonconsensual-intimate-deepfake-tools-online/">isdglobal.org</a></li>
+    <li>Computer Use Agents 2026 comparison — <a href="https://www.digitalapplied.com/blog/computer-use-agents-2026-claude-openai-gemini-matrix">digitalapplied.com</a></li>
+    <li>GitHub reference impl — <a href="https://github.com/google-gemini/computer-use-preview">google-gemini/computer-use-preview</a></li>
+  </ol>
+</div>
+
+</body>
+</html>
