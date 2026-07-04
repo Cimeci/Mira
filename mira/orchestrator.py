@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from . import analyzer, locator, notifier
+from . import analyzer, escalation, locator, notifier
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, Mandate, MediaItem, NotificationRecord, Status
 
@@ -65,8 +65,13 @@ async def run_until_gate(
     # Stage 2 — Analyze (+ pré-check mineur / seuil)
     while not located.empty():
         item = await located.get()
-        records.append(await analyzer.analyze(item, log=log, emit=emit))
-        # ESCALATED / REJECTED s'arrêtent ici, par design ; VERIFIED attend dispatch().
+        record = await analyzer.analyze(item, log=log, emit=emit)
+        records.append(record)
+        if record.status is Status.ESCALATED:
+            # G-6 : escalade AVANT toute tentative de stockage — garanti structurellement,
+            # l'analyzer n'a rien téléchargé ni stocké sur ce cas. REJECTED s'arrête ici ;
+            # VERIFIED attend dispatch().
+            escalation.escalate(record, mandate, log=log, emit=emit)
 
     return records
 
