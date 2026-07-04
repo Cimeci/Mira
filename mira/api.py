@@ -52,6 +52,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from . import store
 from .events import StageEvent
 from .mandate import capture_consent, create_demo_mandate
 from .orchestrator import ConsentError, dispatch, run_until_gate
@@ -132,6 +133,8 @@ def _publish(run: CaseRun, msg: dict) -> None:
     Met aussi à jour l'état courant lu par GET /cases/{id}.
     """
     run.history.append(msg)
+    # Miroir durable (Supabase) — fire-and-forget : no-op sans clés, jamais bloquant.
+    store.event_published(run.case_id, len(run.history) - 1, msg)
     kind = msg["kind"]
     if kind == "stage":
         run.last_status = msg["event"]["to_status"]
@@ -286,6 +289,7 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
     mandate = _build_mandate(req, case_id)
     run = CaseRun(case_id=case_id)
     _RUNS[case_id] = run
+    store.case_created(mandate)
     task = asyncio.create_task(_run_pipeline(run, mandate))
     _BACKGROUND_TASKS.add(task)
     task.add_done_callback(_BACKGROUND_TASKS.discard)
