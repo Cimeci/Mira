@@ -1,0 +1,50 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if not scaffolded yet
+        id: guard
+        run: |
+          if [ -f package.json ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; echo "No package.json yet — skipping."; fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.guard.outputs.go == 'true'
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.go == 'true'
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.guard.outputs.go == 'true'
+
+      - name: Typecheck
+        if: steps.guard.outputs.go == 'true'
+        run: pnpm exec tsc --noEmit
+
+      - name: Lint
+        if: steps.guard.outputs.go == 'true'
+        run: pnpm exec eslint .
+
+      - name: Format check
+        if: steps.guard.outputs.go == 'true'
+        run: pnpm exec prettier --check .
+
+      - name: Build
+        if: steps.guard.outputs.go == 'true'
+        run: pnpm build

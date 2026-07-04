@@ -22,6 +22,9 @@ Cursor · Google DeepMind · Vultr · Crusoe. Pattern gagnant 2025 : **outil age
 - **LLM** : track Google → **Gemini / Gemma** (AI Studio). Sinon Claude (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`) via le SDK Anthropic. Toujours viser les modèles les plus récents.
 - Toolchain dispo : node 24, pnpm 9, vercel CLI, gh, git, python3.9.
 
+## Équipe de 5 (collaboration)
+Projet **Mira** (`github.com/Cimeci/Mira`). 5 lanes qui ne se marchent pas dessus (Core / Backend / UI / Infra / Démo) — détail dans `CONTRIBUTING.md`, board dans `TASKS.md`. **`main` est toujours déployable** ; tout passe par branche courte + PR + CI verte. Avant de coder dans un dossier partagé, prévenir l'owner de la lane. Gates qualité automatisés (pre-commit husky/lint-staged + `pnpm check` + CI) → activés par `bash setup.sh`.
+
 ## Règles de travail (mode hackathon)
 1. **Vertical slice d'abord** : le chemin de démo end-to-end qui marche > la feature complète. Fais-le tourner, screenshot, puis élargis.
 2. **Déploie tôt et souvent** sur Vercel — jamais de "ça marche en local" la veille de la deadline.

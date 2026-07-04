@@ -1,6 +1,7 @@
-# 🏆 RAISE Hackathon 2026 — Cockpit
+# 🏆 Mira — RAISE Hackathon 2026 (Cockpit)
 
-> Workspace de build. Ship une démo qui **marche**. Submission **dimanche 12h00**.
+> Workspace de build, équipe de 5. Ship une démo qui **marche**. Submission **dimanche 12h00**.
+> Repo : `github.com/Cimeci/Mira` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
 
 ## ⏱️ Timeline (4–5 juil, venue ferme 22h sam / rouvre 7h dim)
 
