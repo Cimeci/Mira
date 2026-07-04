@@ -7,15 +7,68 @@ tourne sans mandat actif. La state machine vit ici.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 
 from . import analyzer, escalation, locator, notifier
 from .events import Emit, make_event, print_emitter
-from .types import ForensicRecord, Mandate, MediaItem, NotificationRecord, Status
+from .types import ForensicRecord, Mandate, MediaItem, NotificationRecord, Status, utcnow
+
+# Trace dev des pannes de stage (stacktrace complète). Silencieux par défaut : les records
+# partent en DEBUG et le root logger est à WARNING sans handler -> RIEN n'apparaît dans la
+# sortie démo. En dev : logging.basicConfig(level=logging.DEBUG) pour voir les tracebacks.
+_logger = logging.getLogger("mira")
 
 
 class ConsentError(RuntimeError):
     """Levée quand on tente de traiter un case sans mandat actif (G-1)."""
+
+
+# Erreurs de CONTRAT : bug appelant ou refus délibéré d'un gate fail-fast (G-1/G-2/G-7/G-9).
+# Elles doivent REMONTER telles quelles — les convertir en FAILED masquerait un bug ou un
+# refus de consentement. Seules les pannes d'infra imprévues (réseau, API externe, bug
+# interne d'un mock remplacé par du réel) deviennent Status.FAILED.
+_CONTRACT_ERRORS = (ConsentError, ValueError, TypeError, KeyError)
+
+
+def _emit_failed(
+    exc: Exception,
+    *,
+    case_id: str,
+    stage: str,
+    from_status: Status,
+    emit: Emit,
+) -> None:
+    """Convertit une panne d'infra en event FAILED propre — jamais de traceback en live.
+
+    Le payload ne porte que le TYPE de l'exception : son message peut contenir une URL
+    ou de la PII (réponse d'une API externe), il ne sort donc jamais vers la CLI/SSE.
+    La stacktrace complète part sur le logger "mira" (voir _logger ci-dessus).
+    """
+    error_type = type(exc).__name__
+    _logger.debug("stage %s FAILED sur case %s", stage, case_id, exc_info=exc)
+    emit(make_event(
+        case_id,
+        stage,
+        Status.FAILED,
+        from_status=from_status,
+        detail=f"[FAILED] stage {stage} : {error_type} — case arrêté proprement",
+        payload={"stage": stage, "error_type": error_type},
+    ))
+
+
+def _failed_forensic_record(item: MediaItem) -> ForensicRecord:
+    """Record FAILED minimal : rien n'a été prouvé ni stocké pour cet item (G-5 par vide)."""
+    return ForensicRecord(
+        case_id=item.case_id,
+        source_url=item.url,
+        deepfake_score=0.0,
+        perceptual_hash="",
+        sha256_hash="",
+        discovery_ts_utc=utcnow(),
+        status=Status.FAILED,
+        minimal_ref=None,
+    )
 
 
 def _require_active(mandate: Mandate) -> None:
@@ -44,7 +97,8 @@ async def run_until_gate(
 
     Contrat L2 — renvoie `(records, notices)` :
       - records : tous les ForensicRecord produits ; ceux en Status.VERIFIED sont
-        les candidats à dispatcher ;
+        les candidats à dispatcher ; une panne d'infra sur un item produit un record
+        Status.FAILED (event FAILED émis) et les autres items continuent ;
       - notices : dict {record.source_url: notice pré-rédigée} pour chaque VERIFIED.
         À passer TEL QUEL à dispatch(record, mandate, notices[record.source_url])
         pour garantir que l'aperçu montré à la victime == la notice envoyée,
@@ -69,12 +123,31 @@ async def run_until_gate(
     notices: dict[str, str] = {}
 
     # Stage 1 — Locate (in-scope only)
-    await locator.locate(mandate, located, log=log, emit=emit)
+    try:
+        await locator.locate(mandate, located, log=log, emit=emit)
+    except _CONTRACT_ERRORS:
+        raise
+    except Exception as exc:
+        # Sans localisation fiable, le case entier est FAILED : on renvoie ce qui a pu
+        # être produit (rien ici) au lieu de laisser un traceback tuer la démo live.
+        _emit_failed(exc, case_id=mandate.case_id, stage="locator",
+                     from_status=Status.MANDATED, emit=emit)
+        return records, notices
 
     # Stage 2 — Analyze (+ pré-check mineur / seuil)
     while not located.empty():
         item = await located.get()
-        record = await analyzer.analyze(item, log=log, emit=emit)
+        try:
+            record = await analyzer.analyze(item, log=log, emit=emit)
+        except _CONTRACT_ERRORS:
+            raise
+        except Exception as exc:
+            # Panne sur UN item -> record FAILED pour CET item, les AUTRES continuent :
+            # un média en erreur ne doit jamais coûter le run entier à la victime.
+            _emit_failed(exc, case_id=item.case_id, stage="analyzer",
+                         from_status=Status.LOCATED, emit=emit)
+            records.append(_failed_forensic_record(item))
+            continue
         records.append(record)
         if record.status is Status.ESCALATED:
             # G-6 : escalade AVANT toute tentative de stockage — garanti structurellement,
@@ -83,7 +156,17 @@ async def run_until_gate(
         elif record.status is Status.VERIFIED:
             # Pré-gate : la notice est rédigée UNE seule fois ici, montrée en aperçu
             # (event 'notice'), puis envoyée telle quelle par dispatch(notice=...).
-            notice = notifier.draft(record, mandate)
+            try:
+                notice = notifier.draft(record, mandate)
+            except _CONTRACT_ERRORS:
+                raise
+            except Exception as exc:
+                # Sans notice, pas de gate : le record passe FAILED pour que run()/L2
+                # ne tente jamais de le dispatcher ; les autres items continuent.
+                _emit_failed(exc, case_id=record.case_id, stage="notifier",
+                             from_status=Status.VERIFIED, emit=emit)
+                record.status = Status.FAILED
+                continue
             notices[record.source_url] = notice
             # Exception documentée dans events.py : notice_text est NOTRE texte
             # généré (template G-9), jamais du contenu victime ni des octets média.
@@ -126,6 +209,8 @@ async def dispatch(
     échouer en TypeError, jamais auto-envoyer (G-7). Seul run() — la CLI — garde
     _auto_confirm et le transmet explicitement. Fail-closed : refus ou timeout ->
     record DECLINED, rien n'est envoyé (voir notifier.send).
+    Panne d'infra pendant l'envoi -> NotificationRecord Status.FAILED (event FAILED),
+    jamais de traceback ; les refus des gates ci-dessous remontent, eux, à l'appelant.
     """
     # G-1 re-vérifié : du temps humain s'écoule entre le gate et le verdict,
     # le mandat a pu être révoqué entre-temps.
@@ -150,7 +235,23 @@ async def dispatch(
         )
     if notice is None:
         notice = notifier.draft(record, mandate)
-    return await notifier.send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
+    try:
+        return await notifier.send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
+    except _CONTRACT_ERRORS:
+        raise
+    except Exception as exc:
+        _emit_failed(exc, case_id=record.case_id, stage="notifier",
+                     from_status=Status.AWAITING_CONFIRM, emit=emit)
+        # RIEN n'est parti. On garde la notice (déjà validée en aperçu) dans le record
+        # FAILED pour qu'un retry L2/L3 puisse réutiliser exactement le même texte.
+        return NotificationRecord(
+            case_id=record.case_id,
+            source_url=record.source_url,
+            host_contact="",
+            notice_text=notice,
+            dispatched_ts_utc=utcnow(),
+            status=Status.FAILED,
+        )
 
 
 async def run(
