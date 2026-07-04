@@ -12,7 +12,7 @@ import pytest
 from mira import config
 from mira import mandate as mandate_mod
 from mira.orchestrator import ConsentError, dispatch, run, run_until_gate
-from mira.types import NotificationRecord, Status
+from mira.types import ForensicRecord, NotificationRecord, Status, utcnow
 
 
 async def _approve(notice: str) -> bool:
@@ -74,24 +74,104 @@ def test_confirm_timeout_fails_closed(monkeypatch):
 
 
 def test_run_until_gate_then_dispatch_split():
-    """Contrat L2 : run_until_gate renvoie les VERIFIED sans rien envoyer,
-    dispatch envoie APRÈS le verdict humain."""
+    """Contrat L2 : run_until_gate rédige et présente la notice (pré-gate) sans RIEN
+    envoyer ; dispatch envoie la notice pré-rédigée APRÈS le verdict humain."""
     m = mandate_mod.create_demo_mandate()
     events = []
-    records = asyncio.run(run_until_gate(m, log=lambda _msg: None, emit=events.append))
+    records, notices = asyncio.run(
+        run_until_gate(m, log=lambda _msg: None, emit=events.append)
+    )
     verified = [r for r in records if r.status is Status.VERIFIED]
     assert verified, "le happy path doit produire au moins un record VERIFIED"
-    # Rien n'a passé le gate : ni notice présentée, ni envoi.
+    # La notice pré-rédigée est disponible pour l'aperçu L3, indexée par source_url.
+    assert notices[verified[0].source_url].startswith("Objet :")
+    # Le gate est présenté (AWAITING_CONFIRM) mais rien n'a été confirmé ni envoyé.
     statuses = [e.to_status for e in events]
-    assert Status.AWAITING_CONFIRM not in statuses
+    assert Status.AWAITING_CONFIRM in statuses
+    assert Status.CONFIRMED not in statuses
     assert Status.NOTIFIED not in statuses
 
     note = asyncio.run(
-        dispatch(verified[0], m, confirm=_approve, log=lambda _msg: None, emit=events.append)
+        dispatch(
+            verified[0],
+            m,
+            notices[verified[0].source_url],
+            confirm=_approve,
+            log=lambda _msg: None,
+            emit=events.append,
+        )
     )
     assert note.status is Status.NOTIFIED
-    assert [e.to_status for e in events[-3:]] == [
-        Status.AWAITING_CONFIRM,
-        Status.CONFIRMED,
-        Status.NOTIFIED,
-    ]
+    # dispatch ne ré-émet PAS AWAITING_CONFIRM (déjà émis pré-gate) : verdict puis envoi.
+    assert [e.to_status for e in events[-2:]] == [Status.CONFIRMED, Status.NOTIFIED]
+
+
+def _verified_record_and_mandate():
+    """Fabrique (record VERIFIED, mandat, notices) via le vrai pipeline pré-gate."""
+    m = mandate_mod.create_demo_mandate()
+    records, notices = asyncio.run(
+        run_until_gate(m, log=lambda _msg: None, emit=lambda _e: None)
+    )
+    verified = [r for r in records if r.status is Status.VERIFIED]
+    assert verified
+    return verified[0], m, notices
+
+
+def test_preview_notice_is_byte_identical_to_sent_notice():
+    """Garantie centrale du split : la notice montrée en aperçu pré-gate (event
+    'notice') est EXACTEMENT — octet pour octet — celle qui part après confirmation."""
+    m = mandate_mod.create_demo_mandate()
+    events = []
+    records, notices = asyncio.run(
+        run_until_gate(m, log=lambda _msg: None, emit=events.append)
+    )
+    record = next(r for r in records if r.status is Status.VERIFIED)
+    preview = next(e for e in events if e.stage == "notice").payload["notice_text"]
+    assert preview == notices[record.source_url]
+
+    note = asyncio.run(
+        dispatch(record, m, preview, confirm=_approve, log=lambda _msg: None,
+                 emit=events.append)
+    )
+    assert note.status is Status.NOTIFIED
+    assert note.notice_text == preview  # une seule rédaction, zéro divergence
+
+
+def test_dispatch_rejects_case_id_mismatch():
+    """Fix sécurité (a) : un record dispatché sous le mandat d'un AUTRE case est refusé
+    — sinon on notifierait au nom d'une autre victime."""
+    record, _m, notices = _verified_record_and_mandate()
+    other = mandate_mod.create_demo_mandate(case_id="other-case")
+    with pytest.raises(ValueError, match="authorization mismatch"):
+        asyncio.run(
+            dispatch(record, other, notices[record.source_url],
+                     confirm=_approve, log=lambda _msg: None, emit=lambda _e: None)
+        )
+
+
+def test_dispatch_rejects_out_of_scope_record():
+    """Fix sécurité (a) : G-2 re-vérifié au dernier point de sortie — un record forgé
+    hors du périmètre consenti ne part jamais, même VERIFIED et même case_id."""
+    m = mandate_mod.create_demo_mandate()
+    forged = ForensicRecord(
+        case_id=m.case_id,
+        source_url="https://evil-mirror.example/leak.jpg",
+        deepfake_score=0.99,
+        perceptual_hash="phash:forged",
+        sha256_hash="deadbeef",
+        discovery_ts_utc=utcnow(),
+        status=Status.VERIFIED,
+    )
+    with pytest.raises(ValueError, match="G-2"):
+        asyncio.run(
+            dispatch(forged, m, confirm=_approve, log=lambda _msg: None,
+                     emit=lambda _e: None)
+        )
+
+
+def test_dispatch_requires_explicit_confirm():
+    """Fix sécurité (b) : confirm est OBLIGATOIRE — un appel L2 qui l'oublie doit
+    échouer en TypeError, jamais auto-envoyer (G-7)."""
+    record, m, notices = _verified_record_and_mandate()
+    with pytest.raises(TypeError):
+        dispatch(record, m, notices[record.source_url])  # pas de confirm -> refus

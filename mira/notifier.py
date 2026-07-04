@@ -1,7 +1,17 @@
-"""Stage 3 — Le Notifier. Résout l'hébergeur, rédige la notice DSA, gate de confirmation, envoie.
+"""Stage 3 — Le Notifier. Rédaction (draft) et envoi (send) sont SÉPARÉS autour du gate G-7.
 
 Lane L3. Le vrai : RDAP (RFC 9083) -> point de contact DSA -> abuse@ ; LLM avec template
 strict DSA art.16 ; dispatch Resend vers l'inbox de démo uniquement (G-12).
+
+Contrat L2/L3 (split draft/send)
+--------------------------------
+  draft(record, mandate) -> str          : PUR, sans I/O — le texte à montrer en aperçu.
+  send(notice, record, mandate, ...)     : envoie CE texte tel quel derrière le gate G-7,
+                                           ne re-rédige jamais.
+  notify(record, mandate, ...)           : composition draft + gate + send (appel direct /
+                                           CLI) — sémantique historique intacte.
+Garantie : l'aperçu montré à la victime (event 'notice' pré-gate, orchestrateur) et la
+notice envoyée après confirmation sont le MÊME texte, octet pour octet.
 """
 
 from __future__ import annotations
@@ -114,7 +124,23 @@ def _draft_dsa_notice(record: ForensicRecord, host: str, mandate: Mandate) -> st
     return _legal_core(record, host, mandate)
 
 
-async def notify(
+def draft(record: ForensicRecord, mandate: Mandate) -> str:
+    """Rédige la notice DSA pour un record VERIFIED — fonction PURE, aucune I/O.
+
+    Contrat L2/L3 : c'est CE texte que l'UI montre en aperçu dans le panneau de
+    confirmation (avant le clic de la victime) ; send() enverra exactement le même,
+    octet pour octet. L'hébergeur est résolu en interne (mock RDAP déterministe) :
+    pour un même (record, mandate), draft() renvoie toujours le même texte.
+    """
+    # G-6/G-7 : aucune notice sur un cas non vérifié (ESCALATED/REJECTED) — même en appel direct.
+    if record.status is not Status.VERIFIED:
+        raise ValueError(f"draft() refusé : record {record.case_id} non VERIFIED (G-6/G-7).")
+    host = _resolve_host(record.source_url)
+    return _draft_dsa_notice(record, host, mandate)
+
+
+async def send(
+    notice: str,
     record: ForensicRecord,
     mandate: Mandate,
     *,
@@ -122,7 +148,11 @@ async def notify(
     log=print,
     emit: Emit = print_emitter,
 ) -> NotificationRecord:
-    """Résout l'hôte, rédige, fait confirmer par la victime (G-7), puis envoie.
+    """Envoie une notice DÉJÀ rédigée derrière le gate G-7 — ne re-rédige JAMAIS.
+
+    Pré-condition (contrat orchestrateur) : l'event AWAITING_CONFIRM a déjà été émis
+    en amont — par run_until_gate (aperçu pré-gate) ou par notify() en appel direct.
+    send() n'en émet pas, sinon L3 verrait le gate deux fois.
 
     `confirm` est OBLIGATOIREMENT async (jamais un callable sync — on l'await).
     Côté serveur (L2), l'implémentation attend un asyncio.Future/Event résolu par
@@ -130,21 +160,12 @@ async def notify(
     l'event loop entre l'affichage de la notice et le verdict humain.
     Fail-closed : sans réponse sous CONFIRM_TIMEOUT_S, on traite comme un refus.
     """
-    # G-6/G-7 : aucune notice sur un cas non vérifié (ESCALATED/REJECTED) — même en appel direct.
+    # Défense en profondeur : même un appelant qui a déjà une notice ne peut pas
+    # envoyer pour un cas non vérifié.
     if record.status is not Status.VERIFIED:
-        raise ValueError(f"notify() refusé : record {record.case_id} non VERIFIED (G-6/G-7).")
+        raise ValueError(f"send() refusé : record {record.case_id} non VERIFIED (G-6/G-7).")
     host = _resolve_host(record.source_url)
-    notice = _draft_dsa_notice(record, host, mandate)
     log(f"[NOTIFY] hôte résolu : {host}")
-
-    # Le texte de la notice ne va PAS dans le payload (règle events.py) — url seulement.
-    emit(make_event(
-        record.case_id,
-        "notifier",
-        Status.AWAITING_CONFIRM,
-        from_status=Status.VERIFIED,
-        payload={"url": record.source_url},
-    ))
 
     # G-7 : gate de confirmation de la victime avant tout envoi externe.
     pending = confirm(notice)
@@ -197,6 +218,34 @@ async def notify(
         payload={"url": record.source_url},
     ))
     return _record(record, host, notice, Status.NOTIFIED)
+
+
+async def notify(
+    record: ForensicRecord,
+    mandate: Mandate,
+    *,
+    confirm: Callable[[str], Awaitable[bool]],
+    log=print,
+    emit: Emit = print_emitter,
+) -> NotificationRecord:
+    """Composition draft + gate + send — le contrat historique (appel direct / CLI).
+
+    En appel direct, notify() émet lui-même AWAITING_CONFIRM (personne d'autre ne
+    l'a fait). Quand on passe par l'orchestrateur, run_until_gate émet le gate
+    pré-rédaction et dispatch(notice=...) appelle send() directement — notify()
+    n'est pas sur ce chemin, donc jamais de double émission.
+    """
+    notice = draft(record, mandate)
+    # Le texte de la notice ne va PAS dans ce payload : seule l'exception documentée
+    # de l'event stage='notice' (orchestrateur) peut le porter (règle events.py).
+    emit(make_event(
+        record.case_id,
+        "notifier",
+        Status.AWAITING_CONFIRM,
+        from_status=Status.VERIFIED,
+        payload={"url": record.source_url},
+    ))
+    return await send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
 
 
 def _record(r: ForensicRecord, host: str, notice: str, status: Status) -> NotificationRecord:

@@ -11,7 +11,8 @@ Schéma d'un StageEvent
 ----------------------
   case_id     : str            — id opaque du dossier (aucune PII, cf. types.Mandate).
   stage       : str            — module émetteur : "mandate" | "locator" | "analyzer"
-                                 | "notifier". Sert au groupage visuel côté UI.
+                                 | "notifier" | "notice" (aperçu pré-gate de la notice,
+                                 émis par l'orchestrateur). Sert au groupage visuel côté UI.
   from_status : Status | None  — état AVANT la transition ; None uniquement pour MANDATED
                                  (naissance du case, pas d'état antérieur).
   to_status   : Status         — état APRÈS la transition. C'est LA clé de rendu côté L3.
@@ -29,19 +30,32 @@ Transitions émises (ordre nominal d'un run happy path)
   LOCATED           locator, 1x par média émis   — payload {url}
   VERIFIED          analyzer, 1x par média       — payload {url, score, phash, sha256}
   REJECTED          analyzer (score < seuil)     — payload {url, score}
-  ESCALATED         analyzer (mineur suspecté)   — payload {reason} — MINIMAL, voir G-6
-  AWAITING_CONFIRM  notifier, avant le gate G-7  — payload {url}
+  ESCALATED         analyzer — payload {reason} — MINIMAL, voir G-6. reason vaut
+                    "suspected_minor" (token détecté) ou "precheck_failure" (pré-check
+                    mineur EN PANNE -> escalade par précaution, jamais un FAILED)
+  AWAITING_CONFIRM  émis 2x au stade VERIFIED (orchestrator.run_until_gate) :
+                      1) stage "notice"   — payload {url, notice_text} : l'aperçu de la
+                         notice pré-rédigée pour le panneau de confirmation L3 ;
+                      2) stage "notifier" — payload {url} : le gate G-7 standard.
+                    (en appel DIRECT de notifier.notify, seul le 2) est émis)
   CONFIRMED         notifier, victime approuve   — payload {url}
-  DECLINED          notifier, victime refuse     — payload {url} ; run s'arrête là
+  DECLINED          notifier, victime refuse ou timeout — payload {url} (+ reason="confirm_timeout" sur timeout) ; run s'arrête là
   NOTIFIED          notifier, après dispatch     — payload {url}
-  FAILED            PAS ENCORE ÉMIS — arrive avec la tâche l1-failed-handling
+  FAILED            orchestrateur, panne d'infra imprévue d'un stage (locate / analyze
+                    par item / draft / send) — payload {stage, error_type} : le TYPE
+                    d'exception UNIQUEMENT, jamais son message (il peut contenir une
+                    URL/PII). detail = ligne CLI "[FAILED] stage … : … — case arrêté
+                    proprement". Les erreurs de contrat (ConsentError, gates fail-fast)
+                    ne deviennent JAMAIS FAILED : elles remontent à l'appelant.
   REVOKED           PAS ENCORE ÉMIS — arrive avec la tâche l1-revoke-purge
 
 Règle de contenu du payload (G-6 / G-12 — non négociable)
 ---------------------------------------------------------
   JAMAIS d'octets d'image ni de contenu média dans un payload — uniquement des faits :
-  url / status / hash (phash, sha256) / score / reason. Le texte de la notice DSA n'y
-  figure pas non plus (il transitera par le gate async, tâche l1-async-confirm-gate).
+  url / status / hash (phash, sha256) / score / reason.
+  EXCEPTION UNIQUE — l'event stage "notice" porte `notice_text` : c'est NOTRE propre
+  texte généré (template déterministe G-9, notifier.draft), jamais du contenu victime
+  et jamais d'octets média. Aucun autre event ne transporte le texte de la notice.
   Cas ESCALATED : événement MINIMAL — case_id + reason SEULEMENT ; pas d'URL du média,
   phash/sha absents (rien n'a été téléchargé ni hashé, par design G-6).
 """
