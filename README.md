@@ -32,12 +32,18 @@ Le pipeline `Mandate → Locate → Analyze → Notify` tourne end-to-end avec d
 - [ ] Formulaire de soumission rempli
 - [ ] README repo : quoi + comment lancer + quelle stack sponsor
 
+## 🖥️ Frontend (surface victime, Next.js)
+```bash
+cd frontend && npm install && npm run dev   # http://localhost:3000
+```
+Landing → start → actions → mandat → signature faciale → case. Détails : `frontend/README.md`.
+
 ## 📌 Statut projet
 - **Track** : Safety, Compliance & Agentic AI
 - **Idée** : Mira — agent assistif *consent-first* qui aide une victime de deepfake sexuel non consenti à en obtenir le retrait sous droit EU (RGPD/DSA/loi SREN).
 - **Pipeline** : Mandate → Locate → Analyze → Notify (consent unlocks autonomy).
 - **Chemin de démo (3 beats)** : (1) pas de mandat → l'agent refuse · (2) pipeline complet → notice DSA dans l'inbox · (3) flag mineur → halt + escalade, zéro stockage.
-- **Surface démo** : _à trancher (Next+FastAPI SSE / tout-Python FastAPI SSE)_
+- **Surface démo** : Next.js (`frontend/`) + FastAPI SSE (`mira/api.py`)
 - **URL démo** : _TBD_
 
 ## 🚫 Rappels qui disqualifient
