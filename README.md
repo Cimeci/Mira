@@ -1,7 +1,7 @@
 # 🏆 Mira — RAISE Hackathon 2026 (Cockpit)
 
 > Workspace de build, équipe de 5. Ship une démo qui **marche**. Submission **dimanche 12h00**.
-> Repo : `github.com/Cimeci/Mira` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
+> Repo : `github.com/Cimeci/Mira` · Archi & moteur → `ARCHITECTURE.md` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
 
 **Une grande partie du code se fait avec Claude Code** (pas obligatoire). Si tu l'utilises : ouvre-le dans ce dossier, il lit `CLAUDE.md` automatiquement et connaît d'entrée toutes les règles, le workflow git et le standard de code. Dis-lui juste ta lane (Core/Backend/UI/Infra/Démo). Les mêmes règles s'appliquent si tu codes à la main.
 
@@ -43,4 +43,5 @@ Le pipeline `Mandate → Locate → Analyze → Notify` tourne end-to-end avec d
 ## 🚫 Rappels qui disqualifient
 NEW WORK ONLY (zéro Softcallia/code existant) · 100% OSS/MIT · pas de RAG basique / Streamlit / image analyzer / chatbot générique / CV screener / conseil médical.
 
+→ Architecture technique (agents + computer use Gemini + infra + légal) : `ARCHITECTURE.md`
 → Détails orga + playbook skills : `CHEATSHEET.md`

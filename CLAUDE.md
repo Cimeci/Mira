@@ -89,4 +89,4 @@ La démo est notée en live. « Ça devrait marcher » ≠ « ça marche ».
 - En démo, le flag mineur se déclenche par **metadata/URL**, jamais par une image de mineur.
 
 ## 📂 Fichiers du repo
-`README.md` cockpit · `CONTRIBUTING.md` workflow · `TASKS.md` board · `CHEATSHEET.md` playbook skills · `mira/` le code · `tests/` smoke tests · `reference/` inspiration (jamais réutilisée comme code).
+`README.md` cockpit · `ARCHITECTURE.md` moteur agentique (computer use Gemini + workflow des agents + infra Cloud Run/Browserbase + frontend/backend/branding + cadre légal) · `CONTRIBUTING.md` workflow · `TASKS.md` board · `CHEATSHEET.md` playbook skills · `mira/` le code · `tests/` smoke tests · `reference/` inspiration (jamais réutilisée comme code).
