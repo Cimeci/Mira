@@ -7,6 +7,7 @@ import {
   NoFaceDetectedError,
   computeFaceDescriptor,
   euclideanDistance,
+  isValidDescriptor,
   similarityFromDistance,
 } from "../lib/face.js";
 import { perceptualHash, sha256Hex } from "../lib/hash.js";
@@ -25,14 +26,14 @@ interface VerifyRequestBody {
 function isVerifyRequestBody(body: unknown): body is VerifyRequestBody {
   if (!body || typeof body !== "object") return false;
   const b = body as Record<string, unknown>;
-  const embeddingOk =
-    b.referenceEmbedding === undefined ||
-    (Array.isArray(b.referenceEmbedding) && b.referenceEmbedding.every((n) => typeof n === "number"));
+  // Only the shape is checked here (must be undefined or an array) — the actual
+  // 128-finite-number contract is enforced by isValidDescriptor once we know the
+  // final referenceEmbedding (this override, or the one loaded from storage).
+  if (b.referenceEmbedding !== undefined && !Array.isArray(b.referenceEmbedding)) return false;
   return (
     typeof b.caseId === "string" &&
     typeof b.sourceUrl === "string" &&
-    typeof b.imageBase64 === "string" &&
-    embeddingOk
+    typeof b.imageBase64 === "string"
   );
 }
 
@@ -55,6 +56,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const referenceEmbedding = req.body.referenceEmbedding ?? (await loadReferenceEmbedding(caseId));
   if (!referenceEmbedding) {
     res.status(400).json({ error: "no_reference_enrolled", detail: "call /api/enroll for this caseId first" });
+    return;
+  }
+  // Validates both the client-supplied override and whatever was loaded from
+  // storage — the latter should already be valid (enroll.ts validates before
+  // saving), but this keeps both sources held to the same contract rather than
+  // trusting one implicitly.
+  if (!isValidDescriptor(referenceEmbedding)) {
+    res.status(400).json({ error: "invalid_embedding", detail: "expected 128 finite numbers" });
     return;
   }
 
