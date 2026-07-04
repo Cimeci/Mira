@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DecryptError, decryptJson, encryptJson } from "./crypto.js";
 import { REPOST_HAMMING_THRESHOLD, hammingDistanceHex } from "./hash.js";
 
 // Vercel's serverless filesystem is read-only everywhere except /tmp — storage
@@ -12,6 +13,10 @@ import { REPOST_HAMMING_THRESHOLD, hammingDistanceHex } from "./hash.js";
 // across instances) — this is a stopgap so the routes don't crash on write,
 // not real durable storage. ARCHITECTURE.md already calls for Postgres/Supabase
 // as the actual evidence store; this should be replaced by that, not extended.
+//
+// G-5 : tout ce qui est écrit ici est chiffré au repos (lib/crypto.ts, AES-256-GCM)
+// — un fichier indéchiffrable avec la clé courante (reste d'un process précédent
+// sous clé éphémère) est traité comme absent, exactement comme un /tmp purgé.
 const STORAGE_ROOT = path.join(os.tmpdir(), "mira-face-verifier");
 const EVIDENCE_DIR = path.join(STORAGE_ROOT, "evidence");
 const REFERENCE_DIR = path.join(STORAGE_ROOT, "reference");
@@ -91,7 +96,7 @@ export async function saveEvidence(record: EvidenceRecord): Promise<void> {
     );
     if (isRepost) return;
     existing.push(record);
-    await writeFile(evidencePath(record.caseId), JSON.stringify(existing, null, 2), "utf-8");
+    await writeFile(evidencePath(record.caseId), encryptJson(existing), "utf-8");
   });
   pendingWrites.set(record.caseId, next);
   try {
@@ -108,9 +113,13 @@ export async function saveEvidence(record: EvidenceRecord): Promise<void> {
 export async function loadEvidence(caseId: string): Promise<EvidenceRecord[]> {
   try {
     const raw = await readFile(evidencePath(caseId), "utf-8");
-    return JSON.parse(raw) as EvidenceRecord[];
+    return decryptJson<EvidenceRecord[]>(raw);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (err instanceof DecryptError) {
+      console.warn(`[store] evidence for ${caseId} undecryptable with current key — treating as absent`);
+      return [];
+    }
     throw err;
   }
 }
@@ -119,15 +128,19 @@ export async function loadEvidence(caseId: string): Promise<EvidenceRecord[]> {
  * alongside the photo it was derived from (the photo was never written to disk). */
 export async function saveReferenceEmbedding(caseId: string, embedding: number[]): Promise<void> {
   await ensureDir(REFERENCE_DIR);
-  await writeFile(referencePath(caseId), JSON.stringify({ caseId, embedding }), "utf-8");
+  await writeFile(referencePath(caseId), encryptJson({ caseId, embedding }), "utf-8");
 }
 
 export async function loadReferenceEmbedding(caseId: string): Promise<number[] | null> {
   try {
     const raw = await readFile(referencePath(caseId), "utf-8");
-    return (JSON.parse(raw) as { embedding: number[] }).embedding;
+    return decryptJson<{ embedding: number[] }>(raw).embedding;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (err instanceof DecryptError) {
+      console.warn(`[store] reference for ${caseId} undecryptable with current key — treating as absent`);
+      return null;
+    }
     throw err;
   }
 }
