@@ -13,3 +13,6 @@ scratch/
 __pycache__/
 .claude/settings.local.json
 .mira_consent/
+
+# Plan de travail perso (non commité — cf. en-tête du fichier)
+PLAN.local.md
