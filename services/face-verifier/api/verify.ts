@@ -11,6 +11,7 @@ import {
   similarityFromDistance,
 } from "../lib/face.js";
 import { perceptualHash, sha256Hex } from "../lib/hash.js";
+import { toImage } from "../lib/image.js";
 import { type EvidenceRecord, isValidCaseId, loadReferenceEmbedding, saveEvidence } from "../lib/store.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB — reject oversized uploads early
@@ -80,7 +81,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const sha256Hash = sha256Hex(imageBuffer);
-  const perceptualHashValue = await perceptualHash(imageBuffer);
+  // Decoded once and shared below — perceptualHash and computeFaceDescriptor
+  // each used to call loadImage on the same bytes independently, decoding the
+  // same image twice per request.
+  const image = await toImage(imageBuffer);
+  const perceptualHashValue = await perceptualHash(image);
   const discoveredAt = new Date().toISOString();
 
   let similarityScore: number | null = null;
@@ -88,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let noFaceDetected = false;
 
   try {
-    const descriptor = await computeFaceDescriptor(imageBuffer);
+    const descriptor = await computeFaceDescriptor(image);
     const distance = euclideanDistance(descriptor, referenceEmbedding);
     similarityScore = similarityFromDistance(distance);
     isMatch = distance < MATCH_DISTANCE_THRESHOLD;

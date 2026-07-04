@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas } from "canvas";
+import { type ImageInput, toImage } from "./image.js";
 
 /** SHA-256 of the exact bytes — the legal-proof hash (any change to the file changes this). */
 export function sha256Hex(buffer: Buffer): string {
@@ -13,8 +14,8 @@ const HASH_SIZE = 8; // 8x8 grid -> 64-bit hash
  * pixel brightness. Survives recompression/resizing/watermarking, unlike SHA-256 —
  * this is what catches the same deepfake reposted elsewhere in a different format.
  */
-export async function perceptualHash(buffer: Buffer): Promise<string> {
-  const image = await loadImage(buffer);
+export async function perceptualHash(input: ImageInput): Promise<string> {
+  const image = await toImage(input);
   const width = HASH_SIZE + 1;
   const height = HASH_SIZE;
   const canvas = createCanvas(width, height);

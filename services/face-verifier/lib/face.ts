@@ -1,7 +1,8 @@
-import { Canvas, Image, ImageData, createCanvas, loadImage } from "canvas";
+import { Canvas, Image, ImageData, createCanvas } from "canvas";
 import * as faceapi from "face-api.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { type ImageInput, toImage } from "./image.js";
 
 // face-api.js expects browser DOM globals (Canvas/Image/ImageData) — provide them
 // via node-canvas. Must run before any faceapi.nets.* call.
@@ -65,10 +66,10 @@ export class NoFaceDetectedError extends Error {
  * surface that (never silently return a zero vector, which would look like
  * a false "match" against anything).
  */
-export async function computeFaceDescriptor(buffer: Buffer): Promise<Float32Array> {
+export async function computeFaceDescriptor(input: ImageInput): Promise<Float32Array> {
   await ensureModelsLoaded();
 
-  const image = await loadImage(buffer);
+  const image = await toImage(input);
   const canvas = createCanvas(image.width, image.height);
   const ctx = canvas.getContext("2d");
   ctx.drawImage(image, 0, 0);
