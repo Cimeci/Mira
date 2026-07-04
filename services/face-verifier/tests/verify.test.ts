@@ -120,6 +120,26 @@ describe("POST /api/verify", () => {
     expect(res.body).toMatchObject({ error: "no_reference_enrolled" });
   });
 
+  it("rejects an undecodable imageBase64 (non-image bytes) with a 400, not an unhandled crash", async () => {
+    const caseId = testCaseId();
+    caseIds.push(caseId);
+
+    const res = mockRes();
+    // Base64 valide mais PAS une image (le scénario HEIC/PDF/corrompu de l'issue #20).
+    await verifyHandler(
+      mockReq("POST", {
+        caseId,
+        sourceUrl: "https://example.test",
+        imageBase64: Buffer.from("definitely not an image").toString("base64"),
+        referenceEmbedding: Array(128).fill(0),
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "invalid_image" });
+  });
+
   it("rejects a body missing required fields", async () => {
     const res = mockRes();
     await verifyHandler(mockReq("POST", { caseId: testCaseId() }), res);

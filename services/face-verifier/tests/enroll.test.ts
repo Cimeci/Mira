@@ -69,6 +69,22 @@ describe("POST /api/enroll", () => {
     expect(res.body).toMatchObject({ error: "invalid_case_id" });
   });
 
+  it("rejects an undecodable imageBase64 (non-image bytes) with a 400, not an unhandled crash", async () => {
+    const caseId = testCaseId();
+    caseIds.push(caseId);
+
+    const res = mockRes();
+    // Base64 valide mais PAS une image (le scénario HEIC/PDF/corrompu de l'issue #20).
+    await enrollHandler(
+      mockReq("POST", { caseId, imageBase64: Buffer.from("definitely not an image").toString("base64") }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "invalid_image" });
+    expect(await loadReferenceEmbedding(caseId)).toBeNull();
+  });
+
   it("rejects a body with neither embedding nor imageBase64", async () => {
     const res = mockRes();
     await enrollHandler(mockReq("POST", { caseId: testCaseId() }), res);
