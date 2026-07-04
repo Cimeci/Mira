@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mira — Live</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="stage wide">
+    <header class="results-head">
+      <a class="back" href="/">← nouveau scan</a>
+      <div class="mark small">MIRA · live</div>
+    </header>
+
+    <div class="live-grid">
+      <section class="viewport">
+        <div class="vp-frame">
+          <img id="screen" alt="écran de l'agent en direct" />
+          <span class="vp-badge" id="vplabel">connexion…</span>
+        </div>
+        <div class="src" id="src"></div>
+      </section>
+
+      <aside class="tracepanel">
+        <div class="tp-head"><span class="live-dot" id="dot"></span> <span id="status">agent en cours…</span></div>
+        <ol class="livetrace" id="trace"></ol>
+      </aside>
+    </div>
+
+    <section class="gallery" id="gallery" hidden></section>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const url = params.get("url") || "";
+    const driver = params.get("driver") || "gemini-cu";
+    document.getElementById("src").textContent = url;
+
+    const trace = document.getElementById("trace");
+    const screen = document.getElementById("screen");
+    const vplabel = document.getElementById("vplabel");
+    const statusEl = document.getElementById("status");
+    const dot = document.getElementById("dot");
+
+    function addTrace(icon, text, cls) {
+      const li = document.createElement("li");
+      const strong = document.createElement("span");
+      strong.className = "ic";
+      strong.textContent = icon;
+      const body = document.createElement("span");
+      if (cls) body.className = cls;
+      body.textContent = text;            // textContent → aucune injection HTML
+      li.append(strong, body);
+      trace.appendChild(li);
+      li.scrollIntoView({ block: "end" });
+    }
+
+    function addPageDivider(label, url) {
+      const li = document.createElement("li");
+      li.className = "page-div";
+      const tag = document.createElement("span");
+      tag.className = "page-tag";
+      tag.textContent = label;
+      const u = document.createElement("span");
+      u.className = "page-url";
+      u.textContent = url;              // textContent → aucune injection HTML
+      li.append(tag, u);
+      trace.appendChild(li);
+      li.scrollIntoView({ block: "end" });
+    }
+
+    const es = new EventSource(`/stream?url=${encodeURIComponent(url)}&driver=${encodeURIComponent(driver)}`);
+
+    es.onmessage = (e) => {
+      const ev = JSON.parse(e.data);
+      switch (ev.type) {
+        case "crawl_start":
+          addTrace("▸", `crawl · max ${ev.limits.pages} pages · profondeur ${ev.limits.depth}`, "muted");
+          break;
+        case "page":
+          addPageDivider(`page ${ev.n}/${ev.total} · profondeur ${ev.depth}`, ev.url);
+          break;
+        case "frame":
+          screen.src = ev.image;
+          vplabel.textContent = ev.label || "";
+          break;
+        case "reasoning":
+          addTrace("🧠", ev.text, "think");
+          break;
+        case "action":
+          addTrace("🖱", `${ev.name} ${ev.args || ""}`.trim(), "act");
+          break;
+        case "safety":
+          addTrace("🔒", `action sensible : ${ev.action} — ${ev.text}`, "safety");
+          break;
+        case "images":
+          addTrace("🖼", `+${ev.new} image(s) · total ${ev.total}`, "muted");
+          break;
+        case "links":
+          addTrace("🔗", `${ev.found} lien(s) trouvés → ${ev.queued} ajoutés à la file`, "muted");
+          break;
+        case "note":
+          addTrace("·", ev.text, "muted");
+          break;
+        case "error":
+          addTrace("⚠️", ev.message, "err");
+          finish("échec", false);
+          break;
+        case "done":
+          renderGallery(ev);
+          finish(`${ev.count} image(s) · ${ev.pages} page(s) · ${ev.elapsed}s`, true);
+          break;
+      }
+    };
+    es.onerror = () => { es.close(); };
+
+    function finish(label, ok) {
+      statusEl.textContent = label;
+      dot.classList.add(ok ? "done" : "failed");
+      es.close();
+    }
+
+    function renderGallery(ev) {
+      const g = document.getElementById("gallery");
+      g.hidden = false;
+      for (const img of ev.images) {
+        const fig = document.createElement("figure");
+        fig.className = "card";
+        const a = document.createElement("a");
+        a.href = img.url; a.target = "_blank"; a.rel = "noreferrer";
+        const im = document.createElement("img");
+        im.src = img.url; im.loading = "lazy"; im.alt = img.alt || "";
+        a.appendChild(im);
+        const cap = document.createElement("figcaption");
+        const dim = document.createElement("span");
+        dim.className = "dim";
+        dim.textContent = img.width ? `${img.width}×${img.height}` : "?";
+        const u = document.createElement("span");
+        u.className = "u";
+        u.textContent = img.url;
+        cap.append(dim, u);
+        if (img.note) {
+          const note = document.createElement("span");
+          note.className = "note";
+          note.textContent = img.note;        // textContent → aucune injection HTML
+          cap.append(note);
+        }
+        fig.append(a, cap);
+        g.appendChild(fig);
+      }
+    }
+  </script>
+</body>
+</html>

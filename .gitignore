@@ -14,5 +14,11 @@ __pycache__/
 .claude/settings.local.json
 .mira_consent/
 
+# Captures runtime du locator (générées à chaque scan, jamais versionnées)
+mira/web/static/shots/
+
+# Profil de navigateur persistant : contient les COOKIES DE SESSION (secrets !)
+.mira_browser_profile/
+
 # Plan de travail perso (non commité — cf. en-tête du fichier)
 PLAN.local.md

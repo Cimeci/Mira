@@ -16,6 +16,13 @@ source .venv/bin/activate
 python -m pip install -q --upgrade pip
 python -m pip install -q -r requirements.txt
 
+# ── Git hooks : protègent main (pas de push/commit direct, commits bien formés) ──
+if [ -d .git ]; then
+  git config core.hooksPath .githooks
+  chmod +x .githooks/* 2>/dev/null || true
+  echo "==> Git hooks activés (.githooks) : push/commit direct sur main bloqués"
+fi
+
 echo ""
 echo "✅ Prêt."
 echo "   source .venv/bin/activate     # activer l'environnement"

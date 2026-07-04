@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mira — Résultats</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="stage wide">
+    <header class="results-head">
+      <a class="back" href="/">← nouveau scan</a>
+      <div class="mark small">MIRA</div>
+    </header>
+
+    {% if result.error %}
+    <section class="error-card">
+      <h2>⚠️ Le scan a échoué</h2>
+      <p class="src">{{ result.source_url }}</p>
+      <pre>{{ result.error }}</pre>
+    </section>
+    {% else %}
+    <section class="summary">
+      <div class="summary-main">
+        <div class="src-label">source</div>
+        <div class="src">{{ result.source_url }}</div>
+        <div class="stats">
+          <span class="stat"><b>{{ result.count }}</b> image(s)</span>
+          <span class="stat">{{ result.elapsed_s }}s</span>
+          <span class="stat badge">{{ result.driver }}</span>
+        </div>
+        <ol class="trace">
+          {% for step in result.steps %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+      </div>
+      {% if result.screenshot_url %}
+      <a class="shot" href="{{ result.screenshot_url }}" target="_blank" rel="noreferrer" title="capture full-page">
+        <img src="{{ result.screenshot_url }}" alt="capture de la page" />
+        <span>capture</span>
+      </a>
+      {% endif %}
+    </section>
+
+    {% if result.count == 0 %}
+    <p class="empty">Aucune image trouvée sur cette page.</p>
+    {% else %}
+    <section class="gallery">
+      {% for img in result.images %}
+      <figure class="card">
+        <a href="{{ img.url }}" target="_blank" rel="noreferrer">
+          <img src="{{ img.url }}" alt="{{ img.alt }}" loading="lazy" />
+        </a>
+        <figcaption>
+          <span class="dim">{% if img.width %}{{ img.width }}×{{ img.height }}{% else %}?{% endif %}</span>
+          <span class="u">{{ img.url }}</span>
+        </figcaption>
+      </figure>
+      {% endfor %}
+    </section>
+    {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>

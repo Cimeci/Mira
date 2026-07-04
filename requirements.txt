@@ -11,9 +11,16 @@
 # resend                 # Stage 3 — dispatch email (primaire)
 # sendgrid               # Stage 3 — dispatch email (fallback)
 
-# --- surface API (lane L2) : pipeline exposé en HTTP + SSE (mira/api.py) ---
-fastapi                  # routes + validation Pydantic
-uvicorn[standard]        # serveur ASGI (python -m mira.api)
+# --- surfaces web (partagé L1/L2) : API pipeline (mira/api.py) + live view CU (mira/web) ---
+fastapi                  # routes + validation Pydantic + surface de démo
+uvicorn[standard]        # serveur ASGI (python -m mira.api / python -m mira.web)
+
+# --- locator CU (lane Ilan) ---
+jinja2                   # templates (index / results / live)
+python-multipart         # parsing du form POST /scrape
+playwright               # navigateur du scraper (puis: playwright install chromium)
+google-genai             # Gemini Computer Use
+python-dotenv            # chargement .env.local
 
 # --- dev ---
 ruff
