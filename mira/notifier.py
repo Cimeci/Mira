@@ -6,10 +6,13 @@ strict DSA art.16 ; dispatch Resend vers l'inbox de démo uniquement (G-12).
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
+from . import config
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, Mandate, NotificationRecord, Status, utcnow
 
@@ -115,11 +118,18 @@ async def notify(
     record: ForensicRecord,
     mandate: Mandate,
     *,
-    confirm: Callable[[str], bool],
+    confirm: Callable[[str], Awaitable[bool]],
     log=print,
     emit: Emit = print_emitter,
 ) -> NotificationRecord:
-    """Résout l'hôte, rédige, fait confirmer par la victime, puis envoie."""
+    """Résout l'hôte, rédige, fait confirmer par la victime (G-7), puis envoie.
+
+    `confirm` est OBLIGATOIREMENT async (jamais un callable sync — on l'await).
+    Côté serveur (L2), l'implémentation attend un asyncio.Future/Event résolu par
+    un POST /confirm ultérieur : c'est ce qui permet au gate de tenir sans bloquer
+    l'event loop entre l'affichage de la notice et le verdict humain.
+    Fail-closed : sans réponse sous CONFIRM_TIMEOUT_S, on traite comme un refus.
+    """
     host = _resolve_host(record.source_url)
     notice = _draft_dsa_notice(record, host, mandate)
     log(f"[NOTIFY] hôte résolu : {host}")
@@ -134,7 +144,29 @@ async def notify(
     ))
 
     # G-7 : gate de confirmation de la victime avant tout envoi externe.
-    if not confirm(notice):
+    pending = confirm(notice)
+    if not inspect.isawaitable(pending):
+        # Fail-fast : un confirm sync bloquerait l'event loop (ou pire, un bool nu ici).
+        raise TypeError(
+            f"confirm doit être async (Awaitable[bool]), reçu {type(pending).__name__!r}"
+        )
+    try:
+        # timeout lu sur le module (pas importé par valeur) : monkeypatchable en test.
+        approved = await asyncio.wait_for(pending, timeout=config.CONFIRM_TIMEOUT_S)
+    except TimeoutError:
+        # Fail-closed : silence de la victime = refus. Jamais d'envoi par défaut.
+        log("[NOTIFY] timeout de confirmation -> fail-closed, rien n'est envoyé")
+        emit(make_event(
+            record.case_id,
+            "notifier",
+            Status.DECLINED,
+            from_status=Status.AWAITING_CONFIRM,
+            detail="[NOTIFY] timeout de confirmation -> fail-closed, rien n'est envoyé",
+            payload={"url": record.source_url, "reason": "confirm_timeout"},
+        ))
+        return _record(record, host, notice, Status.DECLINED)
+
+    if not approved:
         emit(make_event(
             record.case_id,
             "notifier",
@@ -143,7 +175,7 @@ async def notify(
             detail="[NOTIFY] victime décline -> hold/purge, rien n'est envoyé",
             payload={"url": record.source_url},
         ))
-        return _record(record, host, notice, Status.CONFIRMED)
+        return _record(record, host, notice, Status.DECLINED)
 
     emit(make_event(
         record.case_id,
