@@ -26,10 +26,15 @@ non-binaires : tokens d'URL, nom de fichier, contexte de la page.
 from __future__ import annotations
 
 import hashlib
+import logging
 
 from .config import DEEPFAKE_SCORE_THRESHOLD
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, MediaItem, Status, utcnow
+
+# Même canal de trace dev que l'orchestrateur : silencieux en démo, stacktrace
+# complète avec logging.basicConfig(level=logging.DEBUG).
+_logger = logging.getLogger("mira")
 
 # G-6 : aucune API d'estimation d'âge sur pixels ne doit JAMAIS entrer dans ce module.
 # Référencée par la docstring du module — c'est un contrat, pas une config.
@@ -99,7 +104,32 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
     ou score sous le seuil.
     """
     # Phase 1 — G-6 : le pré-check mineur tourne AVANT tout stockage. Non négociable (§12).
-    token = await _phase_precheck_minor(item)
+    try:
+        token = await _phase_precheck_minor(item)
+    except Exception as exc:
+        # Précaution G-6 : un pré-check EN PANNE ne peut pas exclure un mineur -> le cas
+        # est traité comme une suspicion (halt + escalade), JAMAIS comme un FAILED
+        # générique indiscernable d'un timeout CV. Ici, même les erreurs de contrat
+        # n'ont pas le droit de contourner l'escalade — c'est l'exception délibérée à
+        # la politique _CONTRACT_ERRORS de l'orchestrateur. Le message d'exception ne
+        # sort jamais (URL/PII possible) : type seulement, stacktrace sur le logger dev.
+        _logger.debug("pré-check mineur en panne sur %s", item.case_id, exc_info=exc)
+        log(
+            f"[ANALYZE] pré-check G-6 en panne ({type(exc).__name__}) "
+            "-> escalade par précaution"
+        )
+        emit(make_event(
+            item.case_id,
+            "analyzer",
+            Status.ESCALATED,
+            from_status=Status.LOCATED,
+            detail=(
+                f"[ANALYZE] pré-check mineur en panne ({type(exc).__name__}) -> ESCALATE "
+                "par précaution : aucun download, aucun hash, aucun stockage"
+            ),
+            payload={"reason": "precheck_failure"},
+        ))
+        return _record(item, score=0.0, phash="", sha="", status=Status.ESCALATED)
     if token is not None:
         log(f"[ANALYZE] pré-check G-6 : token {token!r} détecté (URL/metadata) -> escalade")
         # Event MINIMAL par design G-6 : case_id + raison, pas d'URL du média, pas de hash —

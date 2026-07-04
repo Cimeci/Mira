@@ -30,7 +30,9 @@ Transitions émises (ordre nominal d'un run happy path)
   LOCATED           locator, 1x par média émis   — payload {url}
   VERIFIED          analyzer, 1x par média       — payload {url, score, phash, sha256}
   REJECTED          analyzer (score < seuil)     — payload {url, score}
-  ESCALATED         analyzer (mineur suspecté)   — payload {reason} — MINIMAL, voir G-6
+  ESCALATED         analyzer — payload {reason} — MINIMAL, voir G-6. reason vaut
+                    "suspected_minor" (token détecté) ou "precheck_failure" (pré-check
+                    mineur EN PANNE -> escalade par précaution, jamais un FAILED)
   AWAITING_CONFIRM  émis 2x au stade VERIFIED (orchestrator.run_until_gate) :
                       1) stage "notice"   — payload {url, notice_text} : l'aperçu de la
                          notice pré-rédigée pour le panneau de confirmation L3 ;
@@ -39,7 +41,12 @@ Transitions émises (ordre nominal d'un run happy path)
   CONFIRMED         notifier, victime approuve   — payload {url}
   DECLINED          notifier, victime refuse ou timeout — payload {url} (+ reason="confirm_timeout" sur timeout) ; run s'arrête là
   NOTIFIED          notifier, après dispatch     — payload {url}
-  FAILED            PAS ENCORE ÉMIS — arrive avec la tâche l1-failed-handling
+  FAILED            orchestrateur, panne d'infra imprévue d'un stage (locate / analyze
+                    par item / draft / send) — payload {stage, error_type} : le TYPE
+                    d'exception UNIQUEMENT, jamais son message (il peut contenir une
+                    URL/PII). detail = ligne CLI "[FAILED] stage … : … — case arrêté
+                    proprement". Les erreurs de contrat (ConsentError, gates fail-fast)
+                    ne deviennent JAMAIS FAILED : elles remontent à l'appelant.
   REVOKED           PAS ENCORE ÉMIS — arrive avec la tâche l1-revoke-purge
 
 Règle de contenu du payload (G-6 / G-12 — non négociable)
