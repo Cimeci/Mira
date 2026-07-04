@@ -1,14 +1,19 @@
 """Stage 1 — Le Locator. Trouve le média DANS le périmètre du mandat, uniquement.
 
-Lane L1. Le vrai : browser-use (LLM) + Playwright, contexte read-only, aucune
-navigation hors scope (G-2). Ici : mock déterministe pour une démo stable (premortem T3).
-G-2 est appliqué par du code, pas par une promesse : chaque candidat passe par
-`is_in_scope` avant émission — hors-scope = rejeté et loggé, jamais mis en queue.
+Lane L1. Deux implémentations derrière la MÊME interface `locate()` :
+  - MOCK (défaut) : candidat déterministe, aucun réseau, démo stable (premortem T3) ;
+  - RÉEL (`MIRA_LOCATOR_REAL` truthy, hors `MIRA_DEMO_MODE`) : Gemini 2.5 Computer Use
+    (cerveau) + Playwright (bras), read-only strict — voir `mira/locator_cu.py`.
+
+`is_in_scope` est LE point d'enforcement de G-2 pour les DEUX chemins : chaque candidat
+(mock ou renvoyé par le LLM) passe par ici avant émission — hors-scope = rejeté et loggé,
+jamais mis en queue. `locator_cu` IMPORTE cette fonction, il ne la réimplémente pas.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 from urllib.parse import urlparse
 
 from .events import Emit, make_event, print_emitter
@@ -17,6 +22,22 @@ from .types import Mandate, MediaItem, Status
 # Génère un candidat hors-scope pour rendre le rejet G-2 visible en démo (beat 2).
 SHOW_SCOPE_ENFORCEMENT = True
 _OUT_OF_SCOPE_DECOY = "https://evil-mirror.example/leak.jpg"
+
+# Valeurs env considérées comme « désactivé » pour un flag booléen (aligné sur config._FALSY).
+_FALSY = {"", "0", "false", "no"}
+
+
+def _real_locator_enabled() -> bool:
+    """Vrai si le Locator RÉEL (Gemini CU + Playwright) doit tourner à la place du mock.
+
+    Fail-safe pour la démo : `MIRA_DEMO_MODE` truthy FORCE le mock quoi qu'il arrive
+    (le chemin de démo live ne doit jamais dépendre d'un appel réseau, cf. go/no-go).
+    Le réel ne s'active donc QUE si `MIRA_LOCATOR_REAL` est truthy ET qu'on n'est pas
+    en mode démo.
+    """
+    if os.getenv("MIRA_DEMO_MODE", "").strip().lower() not in _FALSY:
+        return False
+    return os.getenv("MIRA_LOCATOR_REAL", "").strip().lower() not in _FALSY
 
 
 def _path_segments(path: str) -> list[str]:
@@ -52,7 +73,35 @@ async def locate(
     log=print,
     emit: Emit = print_emitter,
 ) -> None:
-    """Émet des MediaItem in-scope dans la queue partagée. Hors-scope = rejeté, jamais émis."""
+    """Point d'entrée du Stage 1 (interface gelée, appelée par l'orchestrateur).
+
+    Aiguille vers le Locator RÉEL (Gemini CU + Playwright) si `MIRA_LOCATOR_REAL` est
+    activé hors mode démo, sinon vers le mock déterministe. Le réel retombe LUI-MÊME
+    proprement sur le mock en cas d'échec (réseau/API/navigateur) — voir `locator_cu` :
+    ce point d'entrée reste donc toujours non-bloquant pour la démo.
+    """
+    if _real_locator_enabled():
+        # Import différé : les deps lourdes (google-genai, playwright) ne sont chargées
+        # QUE sur le chemin réel — le mock reste 100 % stdlib et sans effet de bord.
+        from . import locator_cu
+
+        await locator_cu.locate_real(mandate, out, log=log, emit=emit)
+        return
+    await _locate_mock(mandate, out, log=log, emit=emit)
+
+
+async def _locate_mock(
+    mandate: Mandate,
+    out: asyncio.Queue[MediaItem],
+    *,
+    log=print,
+    emit: Emit = print_emitter,
+) -> None:
+    """MOCK déterministe — émet des MediaItem in-scope. Hors-scope = rejeté, jamais émis.
+
+    C'est aussi le FILET du chemin réel : `locator_cu.locate_real` rappelle cette
+    fonction si la navigation Computer Use échoue, pour que la démo ne casse jamais.
+    """
     # G-1 garanti en amont : orchestrator._require_active est le SEUL point de contrôle
     # (un assert ici serait strippé sous `python -O` — fausse sécurité).
     # rstrip évite `host//fichier` si le scope a un trailing slash.

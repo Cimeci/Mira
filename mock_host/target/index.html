@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Mock host — page cible (démo Mira, contenu synthétique)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; }
+    .grid { display: flex; flex-wrap: wrap; gap: 1rem; }
+    figure { margin: 0; }
+    img { width: 220px; height: 140px; object-fit: cover; border-radius: 8px; background: #eee; }
+    .note { color: #666; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>Galerie de test (synthétique, adultes — jamais de vrai contenu, G-10)</h1>
+  <p class="note">
+    Page servie pour le go/no-go du Locator computer use. Les médias ci-dessous sont
+    <strong>in-scope</strong> (même host + préfixe <code>/target</code>). Le dernier lien pointe
+    <strong>hors-scope</strong> : le Locator doit le JETER (G-2), jamais le mettre en queue.
+  </p>
+
+  <div class="grid">
+    <!-- In-scope : srcs relatifs -> absolus sous /target/ -->
+    <figure><img src="synthetic_1.jpg" alt="synthetic 1" /></figure>
+    <figure><img src="synthetic_2.jpg" alt="synthetic 2" /></figure>
+    <figure><img src="deep/synthetic_3.jpg" alt="synthetic 3 (sous-chemin in-scope)" /></figure>
+
+    <!-- HORS-SCOPE : host différent -> doit être rejeté par is_in_scope, jamais émis -->
+    <figure><img src="https://evil-mirror.example/leak.jpg" alt="hors-scope (doit être jeté)" /></figure>
+  </div>
+
+  <p class="note">Contenu additionnel plus bas — le Locator peut scroller pour le révéler.</p>
+  <div style="height: 1200px"></div>
+  <div class="grid">
+    <figure><img src="synthetic_4.jpg" alt="synthetic 4 (révélé au scroll)" /></figure>
+  </div>
+</body>
+</html>
