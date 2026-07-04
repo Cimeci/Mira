@@ -74,6 +74,10 @@ export async function computeFaceDescriptor(buffer: Buffer): Promise<Float32Arra
   ctx.drawImage(image, 0, 0);
 
   const detection = await faceapi
+    // Reason: detectSingleFace's declared parameter type is a browser
+    // HTMLCanvasElement, not node-canvas's Canvas — the monkeyPatch above makes
+    // node-canvas's Canvas the real runtime implementation, but tsc only sees
+    // the declared DOM type, so the cast is needed to bridge the two.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .detectSingleFace(canvas as any, new faceapi.TinyFaceDetectorOptions())
     .withFaceLandmarks()
