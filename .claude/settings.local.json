@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(vercel:*)",
+      "Bash(python3:*)",
+      "Bash(pip3:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(curl:*)",
+      "Bash(open:*)",
+      "Bash(chmod:*)",
+      "Bash(tail:*)",
+      "Bash(head:*)",
+      "Read(//Users/comebruchet/Desktop/Softcallia/raise-hackathon-2026/**)",
+      "Write(//Users/comebruchet/Desktop/Softcallia/raise-hackathon-2026/**)",
+      "Edit(//Users/comebruchet/Desktop/Softcallia/raise-hackathon-2026/**)",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": []
+  }
+}
