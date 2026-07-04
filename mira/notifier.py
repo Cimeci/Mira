@@ -48,20 +48,37 @@ def _resolve_host(url: str) -> str:
     return "abuse@mock-host.local"
 
 
-def _legal_core(record: ForensicRecord, host: str) -> str:
+# Ligne « Notifiant » par rôle de mandant : formulations FACTUELLES uniquement —
+# on n'invente aucune base légale de représentation (G-9), on décrit le mandat reçu.
+_NOTIFIER_LINE_BY_ROLE = {
+    "victim": "agissant sur mandat de la personne concernée.",
+    "legal_rep": "agissant sur mandat de son représentant légal mandaté.",
+    "authorized_ngo": "agissant sur mandat d'une ONG autorisée.",
+}
+
+
+def _legal_core(record: ForensicRecord, host: str, mandate: Mandate) -> str:
     """Cœur légal de la notice DSA art. 16 — 100 % template déterministe.
 
     Aucune interpolation LLM sur les citations (G-9). Les seuls champs dynamiques
-    sont factuels : hôte, URL, bloc de preuve (phash/horodatage/score).
+    sont factuels : hôte, URL, base légale et rôle portés par le mandat, bloc de
+    preuve (phash/horodatage/score).
     """
+    try:
+        notifier_line = _NOTIFIER_LINE_BY_ROLE[mandate.requester_role]
+    except KeyError:
+        # Fail-fast : un rôle inconnu ici est un bug amont, pas une notice à improviser.
+        raise KeyError(
+            f"requester_role inconnu pour la notice : {mandate.requester_role!r} "
+            f"(attendu : {sorted(_NOTIFIER_LINE_BY_ROLE)})"
+        ) from None
     return (
         "Objet : Notification de contenu illicite (DSA, art. 16) — retrait demandé\n"
         f"Destinataire : {host}\n"
         f"Localisation exacte : {record.source_url}\n"
-        f"Base légale : {LEGAL_BASIS_CITATION}\n"
+        f"Base légale : {mandate.legal_basis}\n"
         "Substantiation : deepfake sexuel non consenti d'une personne identifiée.\n"
-        "Notifiant : Project Mira, système assistif automatisé, "
-        "agissant sur mandat de la personne concernée.\n"
+        f"Notifiant : Project Mira, système assistif automatisé, {notifier_line}\n"
         f"{GOOD_FAITH_DECLARATION}\n"
         f"Bloc de preuve : phash={record.perceptual_hash} ; "
         f"horodatage={record.discovery_ts_utc.isoformat()} ; "
@@ -70,11 +87,11 @@ def _legal_core(record: ForensicRecord, host: str) -> str:
     )
 
 
-def _draft_dsa_notice(record: ForensicRecord, host: str) -> str:
+def _draft_dsa_notice(record: ForensicRecord, host: str, mandate: Mandate) -> str:
     """Notice complète = cœur légal figé. Si un LLM rédige un jour des parties
     NON légales (cover note), sa sortie passe par assert_no_invented_penalty
     avant concaténation — sinon template seul."""
-    return _legal_core(record, host)
+    return _legal_core(record, host, mandate)
 
 
 async def notify(
@@ -86,7 +103,7 @@ async def notify(
 ) -> NotificationRecord:
     """Résout l'hôte, rédige, fait confirmer par la victime, puis envoie."""
     host = _resolve_host(record.source_url)
-    notice = _draft_dsa_notice(record, host)
+    notice = _draft_dsa_notice(record, host, mandate)
     log(f"[NOTIFY] hôte résolu : {host}")
 
     # G-7 : gate de confirmation de la victime avant tout envoi externe.

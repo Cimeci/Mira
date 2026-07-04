@@ -5,6 +5,8 @@ On teste UNE chose qui compte : les 3 beats de démo se comportent bien.
 
 import asyncio
 
+import pytest
+
 from mira import mandate as mandate_mod
 from mira.orchestrator import ConsentError, run
 from mira.types import Status
@@ -19,11 +21,8 @@ def test_happy_path_dispatches_notice():
 def test_no_active_mandate_refuses():
     m = mandate_mod.create_demo_mandate()
     m.active = False
-    try:
+    with pytest.raises(ConsentError):
         asyncio.run(run(m))
-        assert False, "aurait dû refuser (ConsentError)"
-    except ConsentError:
-        pass
 
 
 def test_suspected_minor_escalates_without_storage():
