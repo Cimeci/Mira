@@ -69,11 +69,32 @@ function referencePath(caseId: string): string {
   return path.join(REFERENCE_DIR, `${caseId}.json`);
 }
 
+// saveEvidence does a read-modify-write (load the whole array, push, write it all
+// back) — two calls for the SAME caseId running concurrently in this process would
+// otherwise both read the same pre-existing array and the later write would
+// silently clobber the earlier one's record. This queue serializes writes per
+// caseId (writes for different cases still run independently/concurrently) so
+// each write is guaranteed to see every write queued ahead of it.
+const pendingWrites = new Map<string, Promise<void>>();
+
 export async function saveEvidence(record: EvidenceRecord): Promise<void> {
-  await ensureDir(EVIDENCE_DIR);
-  const existing = await loadEvidence(record.caseId);
-  existing.push(record);
-  await writeFile(evidencePath(record.caseId), JSON.stringify(existing, null, 2), "utf-8");
+  const previous = pendingWrites.get(record.caseId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(async () => {
+    await ensureDir(EVIDENCE_DIR);
+    const existing = await loadEvidence(record.caseId);
+    existing.push(record);
+    await writeFile(evidencePath(record.caseId), JSON.stringify(existing, null, 2), "utf-8");
+  });
+  pendingWrites.set(record.caseId, next);
+  try {
+    await next;
+  } finally {
+    // Only remove the entry if nothing new was queued behind this write —
+    // otherwise this would delete a later call's still-pending chain.
+    if (pendingWrites.get(record.caseId) === next) {
+      pendingWrites.delete(record.caseId);
+    }
+  }
 }
 
 export async function loadEvidence(caseId: string): Promise<EvidenceRecord[]> {

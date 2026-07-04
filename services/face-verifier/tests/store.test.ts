@@ -127,4 +127,27 @@ describe("evidence store", () => {
     await expect(saveReferenceEmbedding(evilCaseId, [0.1])).rejects.toThrow(InvalidCaseIdError);
     await expect(purgeCase(evilCaseId)).rejects.toThrow(InvalidCaseIdError);
   });
+
+  it("serializes concurrent saveEvidence calls for the same case (no lost updates)", async () => {
+    const caseId = testCaseId();
+    caseIds.push(caseId);
+
+    const makeRecord = (i: number): EvidenceRecord => ({
+      caseId,
+      sourceUrl: `https://example.test/${i}`,
+      sha256Hash: `hash-${i}`,
+      perceptualHash: "p",
+      similarityScore: null,
+      isMatch: false,
+      discoveredAt: new Date().toISOString(),
+    });
+
+    // Without serialization, these all read the same pre-existing (empty) array
+    // before any of them writes, so most records would be lost to last-write-wins.
+    await Promise.all(Array.from({ length: 10 }, (_, i) => saveEvidence(makeRecord(i))));
+
+    const loaded = await loadEvidence(caseId);
+    expect(loaded).toHaveLength(10);
+    expect(new Set(loaded.map((r) => r.sourceUrl)).size).toBe(10);
+  });
 });
