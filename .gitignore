@@ -13,3 +13,6 @@ scratch/
 __pycache__/
 .claude/settings.local.json
 .mira_consent/
+# Preuves chiffrées et journaux de transparence : artefacts runtime, JAMAIS committés (G-5/G-12).
+_evidence/
+_transparency/

@@ -148,6 +148,14 @@ def create_demo_mandate(case_id: str = "demo-001") -> Mandate:
 
 
 def revoke(mandate: Mandate) -> Mandate:
-    """Révocation -> déclenche la purge en aval (G-10, droit à l'effacement)."""
+    """Révocation du mandat : coupe l'autonomie (active=False) et horodate le retrait.
+
+    Ne fait QUE muter l'état du mandat — la purge des preuves/consentement en aval est
+    déclenchée séparément par orchestrator.purge (G-10, droit à l'effacement). Séparer
+    les deux garde revoke() pur et sans I/O, réutilisable partout (API, CLI, checkpoint).
+    Idempotent : re-révoquer ne réécrit pas l'horodatage du premier retrait.
+    """
+    if mandate.revoked_ts_utc is None:
+        mandate.revoked_ts_utc = utcnow()
     mandate.active = False
     return mandate

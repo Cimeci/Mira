@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import Awaitable, Callable
 
 from . import analyzer, escalation, locator, notifier
@@ -78,6 +79,89 @@ def _require_active(mandate: Mandate) -> None:
         )
 
 
+def _purge_evidence(records: list[ForensicRecord], *, log=print) -> None:
+    """Efface les fichiers de preuve chiffrés (minimal_ref) retenus pour ces records.
+
+    G-5/G-10 : on ne garde aucun octet au-delà du strict nécessaire. Idempotent —
+    un ref déjà absent est un no-op (pas un échec caché), et minimal_ref repasse à None
+    pour que le record n'expose plus de chemin mort. Une erreur d'OS imprévue (droits,
+    FS) est loggée, jamais avalée en silence : elle ne doit pas casser la révocation.
+    """
+    for record in records:
+        ref = record.minimal_ref
+        if ref is None:
+            continue
+        try:
+            os.remove(ref)
+        except FileNotFoundError:
+            pass  # déjà purgé — idempotent
+        except OSError as exc:
+            _logger.warning("purge preuve %s a échoué : %s", ref, type(exc).__name__)
+            log(f"[REVOKE] purge preuve impossible ({type(exc).__name__}) — voir logs")
+        record.minimal_ref = None
+
+
+def purge(
+    mandate: Mandate,
+    records: list[ForensicRecord],
+    *,
+    log=print,
+    emit: Emit = print_emitter,
+) -> None:
+    """G-10 (droit à l'effacement) : efface TOUTE trace retenue pour le cas, émet REVOKED.
+
+    `orchestrator.purge(case_id)` de la spec — signature élargie car l'orchestrateur est
+    sans état : l'appelant fournit le mandat (porteur du consent_artifact) et les records
+    (porteurs des minimal_ref). Supprime les preuves chiffrées ET l'artefact de
+    consentement, puis émet l'unique event terminal REVOKED (source de vérité : c'est ici
+    qu'on stampe la fin d'un case révoqué, jamais dispersé dans les stages). Idempotent.
+    """
+    _purge_evidence(records, log=log)
+    artifact = mandate.consent_artifact
+    if artifact is not None:
+        try:
+            artifact.unlink()
+        except FileNotFoundError:
+            pass  # déjà purgé — idempotent
+        except OSError as exc:
+            _logger.warning("purge consentement %s a échoué : %s", artifact, type(exc).__name__)
+        mandate.consent_artifact = None
+    emit(make_event(
+        mandate.case_id,
+        "mandate",
+        Status.REVOKED,
+        from_status=Status.MANDATED,
+        detail=f"[REVOKE] mandat {mandate.case_id} révoqué — preuve et consentement purgés (G-10)",
+        payload={"reason": "mandate_revoked"},
+    ))
+
+
+def _cooperative_stop(
+    mandate: Mandate,
+    records: list[ForensicRecord],
+    notices: dict[str, str],
+    *,
+    log,
+    emit: Emit,
+) -> bool:
+    """Checkpoint coopératif : mandat révoqué EN COURS de route -> arrêt propre, aucun envoi.
+
+    Distinct du gate d'entrée G-1 unique (_require_active, vérifié une fois à l'ouverture) :
+    ici on re-teste ENTRE les stages/items, car la révocation peut tomber pendant que le
+    pipeline tourne. Si révoqué : purge tout (preuve + consentement, émet REVOKED), vide les
+    notices et neutralise les records VERIFIED (-> REVOKED) pour qu'aucun dispatch ultérieur
+    ne parte. Retourne True quand l'appelant doit s'arrêter immédiatement.
+    """
+    if mandate.active:
+        return False
+    purge(mandate, records, log=log, emit=emit)
+    notices.clear()
+    for record in records:
+        if record.status is Status.VERIFIED:
+            record.status = Status.REVOKED
+    return True
+
+
 async def _auto_confirm(notice: str) -> bool:
     """Confirm par défaut (CLI/tests) : approuve immédiatement.
 
@@ -134,8 +218,15 @@ async def run_until_gate(
                      from_status=Status.MANDATED, emit=emit)
         return records, notices
 
+    # Checkpoint coopératif : révoqué pendant la localisation ? On s'arrête avant d'analyser.
+    if _cooperative_stop(mandate, records, notices, log=log, emit=emit):
+        return records, notices
+
     # Stage 2 — Analyze (+ pré-check mineur / seuil)
     while not located.empty():
+        # Révoqué ENTRE deux items -> arrêt propre avant d'en tirer un nouveau du buffer.
+        if _cooperative_stop(mandate, records, notices, log=log, emit=emit):
+            return records, notices
         item = await located.get()
         try:
             record = await analyzer.analyze(item, log=log, emit=emit)
@@ -149,6 +240,10 @@ async def run_until_gate(
             records.append(_failed_forensic_record(item))
             continue
         records.append(record)
+        # Révoqué PENDANT l'analyse de cet item ? On purge (y compris sa minimal_ref
+        # fraîchement écrite) et on s'arrête AVANT d'ouvrir le gate G-7 -> aucun envoi.
+        if _cooperative_stop(mandate, records, notices, log=log, emit=emit):
+            return records, notices
         if record.status is Status.ESCALATED:
             # G-6 : escalade AVANT toute tentative de stockage — garanti structurellement,
             # l'analyzer n'a rien téléchargé ni stocké sur ce cas. REJECTED s'arrête ici.
@@ -236,7 +331,7 @@ async def dispatch(
     if notice is None:
         notice = notifier.draft(record, mandate)
     try:
-        return await notifier.send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
+        result = await notifier.send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
     except _CONTRACT_ERRORS:
         raise
     except Exception as exc:
@@ -252,6 +347,12 @@ async def dispatch(
             dispatched_ts_utc=utcnow(),
             status=Status.FAILED,
         )
+    if result.status is Status.DECLINED:
+        # G-7/G-10 : refus (ou timeout fail-closed) de la victime -> aucune preuve n'est
+        # conservée. On purge la minimal_ref immédiatement ; rien ne subsiste au-delà de
+        # config.EVIDENCE_RETENTION_DAYS, a fortiori après un refus explicite.
+        _purge_evidence([record], log=log)
+    return result
 
 
 async def run(

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import os
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 
 from mira.api.schemas import RunRequest, CaseCreated
-from mira.api.store import create_case, CaseAlreadyExists, get_case, CaseNotFound
+from mira.api.store import create_case, CaseAlreadyExists, get_case, CaseNotFound, drop_case
 from mira.api.events import make_logger, to_sse, to_sse_done
-from mira.orchestrator import run_until_gate, ConsentError
+from mira.orchestrator import run_until_gate, ConsentError, purge as orchestrator_purge
 from mira.types import Status
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -216,27 +216,30 @@ async def create_mandate(req: MandateRequest):
         
     return {"case_id": mand.case_id, "status": "MANDATED"}
 
-from mira.api.store import purge
-from mira.events import make_event
-
 @app.post("/revoke/{case_id}")
 async def revoke_mandate(case_id: str):
     try:
         case = get_case(case_id)
     except CaseNotFound:
-        raise HTTPException(status_code=404, detail="Case not found")
-        
-    case.mandate.revoke()
-    
+        raise HTTPException(status_code=404, detail="Case not found") from None
+
+    # 1. Révoque le mandat : active=False + revoked_ts_utc (source de vérité L1, mira.mandate).
+    mandate_mod.revoke(case.mandate)
+
+    # 2. Annule la Task pré-gate si elle tourne encore : plus aucun stage ne doit avancer.
     if case.task and not case.task.done():
         case.task.cancel()
-        
+
+    # 3. Purge réelle L1 : supprime les preuves chiffrées + l'artefact de consentement ET
+    #    pousse l'event terminal REVOKED DANS la queue AVANT toute fermeture — un GET /stream
+    #    encore ouvert doit le voir passer (c'est le contrat de vérification de cette tâche).
     emit = make_logger(case.queue)
-    emit(make_event(case_id, "mandate", Status.REVOKED, from_status=Status.MANDATED, payload={"reason": "user_revoked"}))
-    
-    # We yield the cpu a bit so SSE can push the REVOKED event before purge drops the queue
-    await asyncio.sleep(0.1)
-    
-    purge(case_id)
-    
+    orchestrator_purge(case.mandate, case.records, emit=emit)
+
+    # 4. Cède l'event loop pour laisser le générateur SSE consommer REVOKED avant le drop.
+    await asyncio.sleep(0)
+
+    # 5. Libère l'état in-memory du case (ses records ont déjà été vidés de leurs refs).
+    drop_case(case_id)
+
     return {"status": "REVOKED"}

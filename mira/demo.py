@@ -38,7 +38,7 @@ async def main() -> None:
 
     # --- Beat 1 : refus sans mandat ---
     _banner("BEAT 1 — pas de mandat actif -> refus")
-    m.active = False
+    mandate_mod.revoke(m)  # vraie révocation (active=False + horodatage), pas une mutation nue
     try:
         await run(m)
     except ConsentError as e:
