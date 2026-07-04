@@ -130,6 +130,9 @@ async def notify(
     l'event loop entre l'affichage de la notice et le verdict humain.
     Fail-closed : sans réponse sous CONFIRM_TIMEOUT_S, on traite comme un refus.
     """
+    # G-6/G-7 : aucune notice sur un cas non vérifié (ESCALATED/REJECTED) — même en appel direct.
+    if record.status is not Status.VERIFIED:
+        raise ValueError(f"notify() refusé : record {record.case_id} non VERIFIED (G-6/G-7).")
     host = _resolve_host(record.source_url)
     notice = _draft_dsa_notice(record, host, mandate)
     log(f"[NOTIFY] hôte résolu : {host}")
