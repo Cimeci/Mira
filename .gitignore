@@ -13,3 +13,5 @@ scratch/
 __pycache__/
 .claude/settings.local.json
 .mira_consent/
+services/face-verifier/.mira_evidence/
+services/face-verifier/.mira_reference/

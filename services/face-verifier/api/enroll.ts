@@ -3,6 +3,7 @@
 // the `canvas` native bindings for image decoding, which Edge cannot run.
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { NoFaceDetectedError, computeFaceDescriptor } from "../lib/face.js";
+import { saveReferenceEmbedding } from "../lib/store.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -31,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { caseId, imageBase64 } = req.body;
 
   // Decoded strictly in memory for this request; never written to disk or logged.
-  // Only the resulting embedding is returned — the photo itself never leaves this scope.
+  // Only the resulting embedding is persisted — the photo itself never leaves this scope.
   const imageBuffer = Buffer.from(imageBase64, "base64");
   if (imageBuffer.byteLength === 0 || imageBuffer.byteLength > MAX_IMAGE_BYTES) {
     res.status(400).json({ error: "invalid_image_size" });
@@ -40,10 +41,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const descriptor = await computeFaceDescriptor(imageBuffer);
-    res.status(200).json({
-      caseId,
-      embedding: Array.from(descriptor),
-    });
+    const embedding = Array.from(descriptor);
+    await saveReferenceEmbedding(caseId, embedding);
+    res.status(200).json({ caseId, embedding });
   } catch (err) {
     if (err instanceof NoFaceDetectedError) {
       res.status(422).json({ error: "no_face_detected" });
