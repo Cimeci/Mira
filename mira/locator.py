@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from urllib.parse import urlparse
 
+from .events import Emit, make_event, print_emitter
 from .types import Mandate, MediaItem, Status
 
 # Génère un candidat hors-scope pour rendre le rejet G-2 visible en démo (beat 2).
@@ -44,7 +45,13 @@ def is_in_scope(candidate_url: str, scope_urls: list[str]) -> bool:
     return False
 
 
-async def locate(mandate: Mandate, out: asyncio.Queue[MediaItem], *, log=print) -> None:
+async def locate(
+    mandate: Mandate,
+    out: asyncio.Queue[MediaItem],
+    *,
+    log=print,
+    emit: Emit = print_emitter,
+) -> None:
     """Émet des MediaItem in-scope dans la queue partagée. Hors-scope = rejeté, jamais émis."""
     # G-1 garanti en amont : orchestrator._require_active est le SEUL point de contrôle
     # (un assert ici serait strippé sous `python -O` — fausse sécurité).
@@ -54,8 +61,16 @@ async def locate(mandate: Mandate, out: asyncio.Queue[MediaItem], *, log=print) 
         candidates.append(_OUT_OF_SCOPE_DECOY)  # doit être rejeté ci-dessous, preuve vivante de G-2
     for media_url in candidates:
         if not is_in_scope(media_url, mandate.scope_urls):
+            # Pas une transition d'état (rien n'entre dans le pipeline) -> log, pas d'event.
             log(f"[LOCATE] hors-scope rejeté (G-2): {media_url}")
             continue
-        log(f"[LOCATE] média in-scope trouvé : {media_url}")
+        emit(make_event(
+            mandate.case_id,
+            "locator",
+            Status.LOCATED,
+            from_status=Status.MANDATED,
+            detail=f"[LOCATE] média in-scope trouvé : {media_url}",
+            payload={"url": media_url},
+        ))
         await out.put(MediaItem(case_id=mandate.case_id, url=media_url, status=Status.LOCATED))
         await asyncio.sleep(0)  # yield au runtime async
