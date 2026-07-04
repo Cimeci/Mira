@@ -43,7 +43,15 @@ Corps **optionnel** (sans corps → mandat de démo pré-autorisé sur le mock h
 ```
 
 `requester_role` ∈ `victim | legal_rep | authorized_ngo`. Scope invalide / attestation
-manquante → **400** (fail-fast, cf. `mandate.capture_consent`). Réponse :
+manquante → **400** (fail-fast, cf. `mandate.capture_consent`).
+
+Deux validations supplémentaires à la frontière (→ **400**) :
+- `case_id` : format strict `^[A-Za-z0-9_-]{1,64}$` (il finit dans un chemin fichier —
+  anti path-traversal) ; omis ou vide → id généré côté serveur.
+- `scope_urls` : hosts limités à l'allow-list démo (G-2/G-12), par défaut
+  `mock-host.local`, extensible via `MIRA_ALLOWED_SCOPE_HOSTS="a.local,b.local"`.
+
+Réponse :
 
 ```json
 { "case_id":"case-ab12cd34",
