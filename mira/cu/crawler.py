@@ -16,8 +16,10 @@ from __future__ import annotations
 import time
 from collections import deque
 from collections.abc import AsyncIterator
+from dataclasses import replace
 
 from google import genai
+from google.genai import types
 from playwright.async_api import async_playwright
 
 from .actions import VIEWPORT
@@ -31,15 +33,43 @@ _MAX_LINKS = 8
 _STEPS_PER_PAGE = 8
 
 
+_DESCRIBE_MODEL = "gemini-2.5-flash"
+
+
+async def _describe_page(client: genai.Client, page) -> str:
+    """Décrit en une phrase française les images de la page — appel vision dédié
+    (modèle rapide), séparé de la navigation Computer Use pour un rendu propre."""
+    shot = await page.screenshot(type="png")
+    prompt = (
+        "Décris en UNE phrase courte, en français, la ou les image(s) principale(s) "
+        "visible(s) sur cette page. Si la page ne contient pas d'image de contenu, "
+        "réponds par une chaîne vide."
+    )
+    response = await client.aio.models.generate_content(
+        model=_DESCRIBE_MODEL,
+        contents=[
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_bytes(data=shot, mime_type="image/png"),
+                    types.Part(text=prompt),
+                ],
+            )
+        ],
+    )
+    return (response.text or "").strip()[:220]
+
+
 def _crawl_task(email: str, password: str) -> str:
     """Consigne par page : explorer (login éventuel + défilement), sans cliquer les
     liens soi-même — c'est le crawler qui enchaîne les pages, l'agent explore."""
     return (
         "Explore la page actuelle. Si un formulaire de connexion apparaît, connecte-toi "
         f"avec l'e-mail '{email}' et le mot de passe '{password}'. Fais défiler la page "
-        "jusqu'en bas pour révéler tout le contenu (images, vignettes, liens). Ne clique "
-        "sur aucun lien de navigation. Quand la page est entièrement affichée, considère "
-        "la tâche terminée et n'émets plus aucune action."
+        "jusqu'en bas pour révéler tout le contenu (images, vignettes, liens). Quand tu "
+        "vois une image, décris-la en une courte phrase en français. Ne clique sur aucun "
+        "lien de navigation. Quand la page est entièrement affichée, considère la tâche "
+        "terminée et n'émets plus aucune action."
     )
 
 
@@ -99,9 +129,12 @@ async def stream_crawl(
                         email, password, _STEPS_PER_PAGE,
                     ):
                         yield event
+                    note = await _describe_page(client, page)
 
                     images = await extract_images(page)
-                    fresh_imgs = [i for i in images if i.url not in seen_images]
+                    fresh_imgs = [
+                        replace(img, note=note) for img in images if img.url not in seen_images
+                    ]
                     for img in fresh_imgs:
                         seen_images.add(img.url)
                     collected.extend(fresh_imgs)
@@ -126,7 +159,10 @@ async def stream_crawl(
                     "elapsed": round(time.perf_counter() - started, 2),
                     "screenshot": None,
                     "images": [
-                        {"url": i.url, "alt": i.alt, "width": i.width, "height": i.height}
+                        {
+                            "url": i.url, "alt": i.alt, "width": i.width,
+                            "height": i.height, "note": i.note,
+                        }
                         for i in collected
                     ],
                 }

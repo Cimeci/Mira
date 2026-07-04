@@ -140,6 +140,12 @@
         u.className = "u";
         u.textContent = img.url;
         cap.append(dim, u);
+        if (img.note) {
+          const note = document.createElement("span");
+          note.className = "note";
+          note.textContent = img.note;        // textContent → aucune injection HTML
+          cap.append(note);
+        }
         fig.append(a, cap);
         g.appendChild(fig);
       }

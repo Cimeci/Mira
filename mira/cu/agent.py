@@ -46,8 +46,9 @@ def _task(email: str, password: str) -> str:
         "Tu es sur un site dont la galerie d'images peut être protégée par un écran "
         "de connexion. Si un formulaire de connexion apparaît, connecte-toi avec "
         f"l'e-mail '{email}' et le mot de passe '{password}'. Ensuite, fais défiler "
-        "la page jusqu'en bas pour afficher toutes les images de la galerie. Quand "
-        "la galerie est entièrement visible, considère la tâche terminée et n'émets "
+        "la page jusqu'en bas pour afficher toutes les images de la galerie. "
+        "Quand tu vois une image, décris-la en une courte phrase en français. "
+        "Quand la galerie est entièrement visible, considère la tâche terminée et n'émets "
         "plus aucune action."
     )
 

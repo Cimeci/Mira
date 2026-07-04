@@ -15,6 +15,7 @@ class ScrapedImage:
     alt: str = ""               # texte alternatif (indice de contexte)
     width: int | None = None    # dimension naturelle en px (None si inconnue)
     height: int | None = None
+    note: str = ""              # description faite par l'agent ("décris l'image")
 
 
 @dataclass
