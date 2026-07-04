@@ -80,7 +80,32 @@ def _dedup(raw: list[dict]) -> list[ScrapedImage]:
 
 
 async def extract_images(page) -> list[ScrapedImage]:
-    """Récolte finale des <img> rendus (le seul reliquat DOM, à remplacer par la
-    détection Gemini dans l'étape 'zéro DOM')."""
+    """Récolte des <img> rendus sur la page courante."""
     raw = await page.evaluate(_EXTRACT_JS)
     return _dedup(raw)
+
+
+# JS : renvoie tous les liens <a href> absolus de la page.
+_EXTRACT_LINKS_JS = """
+() => Array.from(document.querySelectorAll('a[href]'))
+  .map(a => a.href).filter(h => h.startsWith('http'))
+"""
+
+
+def same_domain(url: str, base: str) -> bool:
+    """G-2 : un lien n'est suivi que s'il reste sur le même hôte que le départ."""
+    return urlparse(url).netloc.lower() == urlparse(base).netloc.lower()
+
+
+async def extract_links(page, base_url: str) -> list[str]:
+    """Liens same-domain de la page courante, dédupliqués, fragment retiré."""
+    hrefs = await page.evaluate(_EXTRACT_LINKS_JS)
+    seen: set[str] = set()
+    links: list[str] = []
+    for href in hrefs:
+        clean = href.split("#")[0]
+        if clean in seen or not same_domain(clean, base_url):
+            continue
+        seen.add(clean)
+        links.append(clean)
+    return links

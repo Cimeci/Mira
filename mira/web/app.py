@@ -21,7 +21,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from mira.cu.agent import scrape_images_cu, stream_scrape_cu
+from mira.cu.agent import scrape_images_cu
+from mira.cu.crawler import stream_crawl
 from mira.cu.models import ScrapeResult
 
 _BASE = Path(__file__).resolve().parent
@@ -44,8 +45,13 @@ def _shot_paths(url: str) -> tuple[str, str]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    default_url = f"{str(request.base_url).rstrip('/')}/mockhost/"
-    return templates.TemplateResponse(request, "index.html", {"default_url": default_url})
+    base = str(request.base_url).rstrip("/")
+    # Champ vide par défaut : on cible de vraies URLs. Le mock reste un banc de test.
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {"default_url": "", "mock_url": f"{base}/mockhost/gallery.html"},
+    )
 
 
 @app.post("/scrape", response_class=HTMLResponse)
@@ -69,10 +75,9 @@ async def live(request: Request, url: str) -> HTMLResponse:
 
 @app.get("/stream")
 async def stream(url: str) -> StreamingResponse:
-    """Flux SSE : chaque étape de l'agent (capture + décision) est poussée au front."""
-    url = url.strip()
-    shot_path, shot_url = _shot_paths(url)
-    generator = stream_scrape_cu(url, screenshot_path=shot_path, screenshot_url=shot_url)
+    """Flux SSE du crawler agentique : l'agent explore une surface bornée, suit les
+    liens same-domain, et pousse au front chaque page + capture + décision."""
+    generator = stream_crawl(url.strip())
 
     async def _events():
         try:

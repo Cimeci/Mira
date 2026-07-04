@@ -1,11 +1,9 @@
-"""Driver Computer Use : Gemini pilote la navigation, on récolte via le DOM.
+"""Driver Computer Use : Gemini pilote la navigation d'UNE page.
 
-`stream_scrape_cu` = générateur d'événements (live view SSE) : il yield chaque
-capture d'écran + chaque décision de l'agent au fil de l'eau. `scrape_images_cu`
-consomme ce même flux pour produire un ScrapeResult (mode non-streamé / fallback).
-
-L'extraction finale des images reste déterministe (scraper.extract_images) :
-l'agent décide *où aller*, le DOM dit *ce qui est là*. Hybride assumé.
+`_run_cu_loop` = la boucle vision-action réutilisable (partagée avec le crawler) :
+capture → le modèle renvoie une action → on l'exécute → nouvelle capture → reboucle.
+`stream_scrape_cu` = scan d'une seule page (ouvre le navigateur, boucle, récolte).
+`scrape_images_cu` = variante non-streamée (agrège en ScrapeResult).
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ from collections.abc import AsyncIterator
 from dotenv import dotenv_values
 from google import genai
 from google.genai import types
-from playwright.async_api import async_playwright
+from playwright.async_api import Page, async_playwright
 
 from .actions import VIEWPORT, exec_action
 from .live import data_uri
@@ -34,9 +32,7 @@ def _api_key() -> str | None:
 
 
 def _redact(text: str, email: str, password: str) -> str:
-    """Ne JAMAIS laisser fuiter les identifiants dans la trace affichée à l'écran.
-    Le modèle recopie les creds dans son raisonnement et ses args ; on masque
-    avant tout affichage (cohérent avec le pitch sécurité de Mira)."""
+    """Ne JAMAIS laisser fuiter les identifiants dans la trace affichée à l'écran."""
     if password:
         text = text.replace(password, "[mot de passe masqué]")
     if email:
@@ -45,7 +41,7 @@ def _redact(text: str, email: str, password: str) -> str:
 
 
 def _task(email: str, password: str) -> str:
-    """Consigne donnée à l'agent. Les identifiants viennent du .env (résolus en amont)."""
+    """Consigne d'un scan simple : login éventuel + défilement de la page."""
     return (
         "Tu es sur un site dont la galerie d'images peut être protégée par un écran "
         "de connexion. Si un formulaire de connexion apparaît, connecte-toi avec "
@@ -69,6 +65,87 @@ def _config() -> types.GenerateContentConfig:
     )
 
 
+async def _run_cu_loop(
+    client: genai.Client,
+    config: types.GenerateContentConfig,
+    page: Page,
+    task: str,
+    email: str,
+    password: str,
+    max_steps: int,
+) -> AsyncIterator[dict]:
+    """Boucle vision-action de Gemini sur la page COURANTE (le goto est fait par
+    l'appelant). Yield reasoning · action · frame · safety · note. S'arrête quand
+    l'agent n'émet plus d'action, sur une action sensible (G-7), ou à la limite."""
+    shot = await page.screenshot(type="png")
+    yield {
+        "type": "frame",
+        "label": "page ouverte",
+        "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
+    }
+    contents: list = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part(text=task),
+                types.Part.from_bytes(data=shot, mime_type="image/png"),
+            ],
+        )
+    ]
+
+    for _step in range(1, max_steps + 1):
+        response = await client.aio.models.generate_content(
+            model=MODEL, contents=contents, config=config
+        )
+        candidate = response.candidates[0]
+        parts = candidate.content.parts or []
+        calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
+
+        for part in parts:
+            if getattr(part, "text", None):
+                yield {"type": "reasoning", "text": _redact(part.text.strip(), email, password)}
+
+        if not calls:
+            yield {"type": "note", "text": "✅ agent : page explorée"}
+            return
+
+        contents.append(candidate.content)
+        response_parts: list = []
+        for call in calls:
+            args = dict(call.args) if call.args else {}
+            safety = args.pop("safety_decision", None)
+            if safety and safety.get("decision") == "require_confirmation":
+                # G-7 : action sensible (connexion) — on ne la franchit jamais seul.
+                yield {
+                    "type": "safety",
+                    "action": call.name,
+                    "text": safety.get("explanation", "action sensible"),
+                }
+                yield {
+                    "type": "note",
+                    "text": "🔒 Garde-fou G-7 : action sensible — arrêt, pas de login automatique.",
+                }
+                return
+            yield {"type": "action", "name": call.name, "args": _redact(str(args), email, password)}
+            action_result = await exec_action(page, call.name, args)
+            await page.wait_for_timeout(500)
+            next_png = await page.screenshot(type="png")
+            yield {
+                "type": "frame",
+                "label": call.name,
+                "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
+            }
+            response_parts.append(
+                types.Part.from_function_response(
+                    name=call.name, response={"url": page.url, **action_result}
+                )
+            )
+            response_parts.append(types.Part.from_bytes(data=next_png, mime_type="image/png"))
+        contents.append(types.Content(role="user", parts=response_parts))
+
+    yield {"type": "note", "text": f"⚠️ limite de {max_steps} étapes atteinte"}
+
+
 async def stream_scrape_cu(
     url: str,
     *,
@@ -76,11 +153,7 @@ async def stream_scrape_cu(
     screenshot_path: str | None = None,
     screenshot_url: str | None = None,
 ) -> AsyncIterator[dict]:
-    """Pilote la navigation avec Gemini et yield la live view (captures + décisions).
-
-    Événements émis : start · frame · reasoning · action · note · done · error.
-    Toute erreur devient un event `error` — jamais d'échec silencieux.
-    """
+    """Scan Computer Use d'une seule page. Événements : start · (loop) · done · error."""
     _validate_url(url)
     yield {"type": "start", "driver": "gemini-cu", "url": url}
 
@@ -101,95 +174,10 @@ async def stream_scrape_cu(
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=20_000)
                 yield {"type": "note", "text": f"navigate → {url}"}
-                shot = await page.screenshot(type="png")
-                yield {
-                    "type": "frame",
-                    "label": "page ouverte",
-                    "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
-                }
-
-                contents: list = [
-                    types.Content(
-                        role="user",
-                        parts=[
-                            types.Part(text=_task(email, password)),
-                            types.Part.from_bytes(data=shot, mime_type="image/png"),
-                        ],
-                    )
-                ]
-
-                halted = False
-                for _step in range(1, max_steps + 1):
-                    response = await client.aio.models.generate_content(
-                        model=MODEL, contents=contents, config=config
-                    )
-                    candidate = response.candidates[0]
-                    parts = candidate.content.parts or []
-                    calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
-
-                    for part in parts:
-                        if getattr(part, "text", None):
-                            yield {
-                                "type": "reasoning",
-                                "text": _redact(part.text.strip(), email, password),
-                            }
-
-                    if not calls:
-                        yield {"type": "note", "text": "✅ agent : tâche jugée terminée"}
-                        break
-
-                    contents.append(candidate.content)
-
-                    response_parts: list = []
-                    for call in calls:
-                        args = dict(call.args) if call.args else {}
-                        safety = args.pop("safety_decision", None)
-                        if safety and safety.get("decision") == "require_confirmation":
-                            # G-7 : le modèle signale lui-même une action sensible
-                            # (connexion à un compte). On ne la franchit JAMAIS seul.
-                            yield {
-                                "type": "safety",
-                                "action": call.name,
-                                "text": safety.get("explanation", "action sensible"),
-                            }
-                            halted = True
-                            break
-                        yield {
-                            "type": "action",
-                            "name": call.name,
-                            "args": _redact(str(args), email, password),
-                        }
-                        action_result = await exec_action(page, call.name, args)
-                        await page.wait_for_timeout(500)
-                        next_png = await page.screenshot(type="png")
-                        yield {
-                            "type": "frame",
-                            "label": call.name,
-                            "image": data_uri(
-                                await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)
-                            ),
-                        }
-                        response_parts.append(
-                            types.Part.from_function_response(
-                                name=call.name, response={"url": page.url, **action_result}
-                            )
-                        )
-                        response_parts.append(
-                            types.Part.from_bytes(data=next_png, mime_type="image/png")
-                        )
-                    if halted:
-                        yield {
-                            "type": "note",
-                            "text": (
-                                "🔒 Garde-fou G-7 : action sensible détectée — l'agent "
-                                "s'arrête et ne se connecte jamais à un compte sans "
-                                "validation humaine."
-                            ),
-                        }
-                        break
-                    contents.append(types.Content(role="user", parts=response_parts))
-                else:
-                    yield {"type": "note", "text": f"⚠️ limite de {max_steps} étapes atteinte"}
+                async for event in _run_cu_loop(
+                    client, config, page, _task(email, password), email, password, max_steps
+                ):
+                    yield event
 
                 images = await extract_images(page)
                 final_shot_url = None
@@ -219,7 +207,7 @@ async def scrape_images_cu(
     screenshot_url: str | None = None,
     max_steps: int = _MAX_STEPS,
 ) -> ScrapeResult:
-    """Version non-streamée (POST classique / fallback) : agrège le flux en ScrapeResult."""
+    """Version non-streamée (POST) : agrège le flux en ScrapeResult."""
     result = ScrapeResult(source_url=url, driver="gemini-cu")
     async for event in stream_scrape_cu(
         url, max_steps=max_steps, screenshot_path=screenshot_path, screenshot_url=screenshot_url
@@ -229,10 +217,10 @@ async def scrape_images_cu(
             result.steps.append(event["text"])
         elif kind == "action":
             result.steps.append(f"🖱 {event['name']} {event['args']}")
-        elif kind == "safety":
-            result.steps.append(f"🔒 action sensible : {event['action']} — {event['text']}")
         elif kind == "reasoning":
             result.steps.append(f"🧠 {event['text'][:150]}")
+        elif kind == "safety":
+            result.steps.append(f"🔒 action sensible : {event['action']} — {event['text']}")
         elif kind == "error":
             result.error = event["message"]
             result.steps.append(f"⚠️ échec Computer Use : {event['message']}")

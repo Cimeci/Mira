@@ -21,19 +21,21 @@
           type="text"
           name="url"
           value="{{ default_url }}"
+          placeholder="https://…  (colle l'URL à explorer)"
           spellcheck="false"
           autocomplete="off"
           autofocus
           aria-label="URL à analyser"
         />
-        <button class="scan" type="submit">Scanner</button>
+        <button class="scan" type="submit">Explorer</button>
       </div>
     </form>
 
     <p class="hint">
-      <strong>Gemini Computer Use</strong> ouvre l'URL, franchit un éventuel login, scrolle,
-      puis collecte les images — l'agent décide de chaque geste (~30-50&nbsp;s).
-      <br />Cible préremplie : le <strong>mock host</strong> de démo — <a href="/mockhost/" target="_blank" rel="noreferrer">le voir</a>.
+      <strong>Crawler agentique</strong> — Gemini explore l'URL (login, scroll), suit les
+      liens du même domaine, et collecte les images de proche en proche (borné :
+      6&nbsp;pages, profondeur&nbsp;2).
+      <br />Banc de test : <a href="/live?url={{ mock_url }}">lancer sur le mock host</a>.
     </p>
 
     <div class="mode">

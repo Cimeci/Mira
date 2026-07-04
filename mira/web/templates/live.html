@@ -56,13 +56,30 @@
       li.scrollIntoView({ block: "end" });
     }
 
+    function addPageDivider(label, url) {
+      const li = document.createElement("li");
+      li.className = "page-div";
+      const tag = document.createElement("span");
+      tag.className = "page-tag";
+      tag.textContent = label;
+      const u = document.createElement("span");
+      u.className = "page-url";
+      u.textContent = url;              // textContent → aucune injection HTML
+      li.append(tag, u);
+      trace.appendChild(li);
+      li.scrollIntoView({ block: "end" });
+    }
+
     const es = new EventSource(`/stream?url=${encodeURIComponent(url)}&driver=${encodeURIComponent(driver)}`);
 
     es.onmessage = (e) => {
       const ev = JSON.parse(e.data);
       switch (ev.type) {
-        case "start":
-          addTrace("▸", `moteur ${ev.driver}`, "muted");
+        case "crawl_start":
+          addTrace("▸", `crawl · max ${ev.limits.pages} pages · profondeur ${ev.limits.depth}`, "muted");
+          break;
+        case "page":
+          addPageDivider(`page ${ev.n}/${ev.total} · profondeur ${ev.depth}`, ev.url);
           break;
         case "frame":
           screen.src = ev.image;
@@ -77,6 +94,12 @@
         case "safety":
           addTrace("🔒", `action sensible : ${ev.action} — ${ev.text}`, "safety");
           break;
+        case "images":
+          addTrace("🖼", `+${ev.new} image(s) · total ${ev.total}`, "muted");
+          break;
+        case "links":
+          addTrace("🔗", `${ev.found} lien(s) trouvés → ${ev.queued} ajoutés à la file`, "muted");
+          break;
         case "note":
           addTrace("·", ev.text, "muted");
           break;
@@ -86,7 +109,7 @@
           break;
         case "done":
           renderGallery(ev);
-          finish(`${ev.count} image(s) · ${ev.elapsed}s`, true);
+          finish(`${ev.count} image(s) · ${ev.pages} page(s) · ${ev.elapsed}s`, true);
           break;
       }
     };
