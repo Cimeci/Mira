@@ -15,6 +15,18 @@ const MODELS_DIR = path.join(__dirname, "..", "models");
  * Euclidean distance, two descriptors are considered the same person. */
 export const MATCH_DISTANCE_THRESHOLD = 0.6;
 
+export const DESCRIPTOR_LENGTH = 128;
+
+/** True only for a well-formed 128-d descriptor — used to validate an embedding
+ * a client computed itself (e.g. in-browser) before we trust and persist it. */
+export function isValidDescriptor(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length === DESCRIPTOR_LENGTH &&
+    value.every((n) => typeof n === "number" && Number.isFinite(n))
+  );
+}
+
 let modelsLoaded: Promise<void> | null = null;
 
 /** Loads model weights once per cold start (module-level singleton) — avoids
