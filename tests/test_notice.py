@@ -36,14 +36,14 @@ def _verified_record() -> ForensicRecord:
 
 
 def test_notice_cites_exact_legal_references():
-    notice = _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate())
+    notice = _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate())
     for ref in _REQUIRED_REFERENCES:
         assert ref in notice, f"référence légale manquante : {ref}"
 
 
 def test_notice_contains_good_faith_declaration():
     # DSA art. 16(2)(d) : la déclaration de bonne foi est une exigence de validité de la notice.
-    notice = _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate())
+    notice = _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate())
     assert "Déclaration de bonne foi" in notice
     assert "16(2)(d)" in notice
 
@@ -51,7 +51,7 @@ def test_notice_contains_good_faith_declaration():
 def test_notice_identifies_notifier_with_email():
     # DSA art. 16(2)(c) : nom + email du notifiant obligatoires (l'anonymat ne couvre
     # que le CSAM) — sans eux, pas de « connaissance effective » art. 16(3).
-    notice = _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate())
+    notice = _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate())
     assert "16(2)(c)" in notice
     assert "@" in notice.split("adresse électronique :")[1].splitlines()[0]
 
@@ -59,14 +59,14 @@ def test_notice_identifies_notifier_with_email():
 def test_ai_transparency_is_voluntary_not_normative():
     # L'AI Act art. 50 n'impose rien ici : afficher une obligation inexistante serait
     # relevé par un juriste au jury — la transparence est présentée comme volontaire.
-    notice = _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate())
+    notice = _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate())
     assert "démarche volontaire" in notice
     assert "(AI Act) :" not in notice
 
 
 def test_notice_never_mentions_penalty():
     # G-9 : une pénalité (même exacte) n'a rien à faire dans la notice ; inventée = disqualifiant.
-    notice = _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate())
+    notice = _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate())
     assert assert_no_invented_penalty(notice) == notice
 
 
@@ -77,13 +77,13 @@ def test_notifier_line_follows_requester_role():
         ("legal_rep", "de son représentant légal mandaté"),
         ("authorized_ngo", "d'une ONG autorisée"),
     ]:
-        notice = _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate(role))
+        notice = _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate(role))
         assert fragment in notice
 
 
 def test_unknown_role_fails_fast():
     with pytest.raises(KeyError):
-        _draft_dsa_notice(_verified_record(), _resolve_host("x"), _mandate("stalker"))
+        _draft_dsa_notice(_verified_record(), "abuse@mock-host.local", _mandate("stalker"))
 
 
 def test_penalty_guard_blocks_llm_output():
