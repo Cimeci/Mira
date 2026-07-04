@@ -11,7 +11,7 @@ import {
   similarityFromDistance,
 } from "../lib/face.js";
 import { perceptualHash, sha256Hex } from "../lib/hash.js";
-import { type EvidenceRecord, loadReferenceEmbedding, saveEvidence } from "../lib/store.js";
+import { type EvidenceRecord, isValidCaseId, loadReferenceEmbedding, saveEvidence } from "../lib/store.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB — reject oversized uploads early
 
@@ -52,6 +52,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { caseId, sourceUrl, imageBase64 } = req.body;
+
+  if (!isValidCaseId(caseId)) {
+    res.status(400).json({ error: "invalid_case_id", detail: "letters, numbers, - and _ only" });
+    return;
+  }
 
   const referenceEmbedding = req.body.referenceEmbedding ?? (await loadReferenceEmbedding(caseId));
   if (!referenceEmbedding) {

@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type EvidenceRecord,
+  InvalidCaseIdError,
+  isValidCaseId,
   loadEvidence,
   loadReferenceEmbedding,
   purgeCase,
@@ -94,5 +96,35 @@ describe("evidence store", () => {
 
     expect(await loadEvidence(caseId)).toEqual([]);
     expect(await loadReferenceEmbedding(caseId)).toBeNull();
+  });
+
+  it("isValidCaseId accepts safe identifiers and rejects path-traversal attempts", () => {
+    expect(isValidCaseId("demo-case")).toBe(true);
+    expect(isValidCaseId("test_ABC-123")).toBe(true);
+    expect(isValidCaseId("../../etc/passwd")).toBe(false);
+    expect(isValidCaseId("..%2F..%2Fetc%2Fpasswd")).toBe(false);
+    expect(isValidCaseId("a/b")).toBe(false);
+    expect(isValidCaseId("a\\b")).toBe(false);
+    expect(isValidCaseId("a.json")).toBe(false);
+    expect(isValidCaseId("")).toBe(false);
+  });
+
+  it("rejects a path-traversal caseId before touching the filesystem, for every exported operation", async () => {
+    const evilCaseId = "../../.mira_reference/other-case";
+    await expect(loadEvidence(evilCaseId)).rejects.toThrow(InvalidCaseIdError);
+    await expect(loadReferenceEmbedding(evilCaseId)).rejects.toThrow(InvalidCaseIdError);
+    await expect(
+      saveEvidence({
+        caseId: evilCaseId,
+        sourceUrl: "https://example.test",
+        sha256Hash: "a",
+        perceptualHash: "b",
+        similarityScore: null,
+        isMatch: false,
+        discoveredAt: new Date().toISOString(),
+      }),
+    ).rejects.toThrow(InvalidCaseIdError);
+    await expect(saveReferenceEmbedding(evilCaseId, [0.1])).rejects.toThrow(InvalidCaseIdError);
+    await expect(purgeCase(evilCaseId)).rejects.toThrow(InvalidCaseIdError);
   });
 });

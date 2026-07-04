@@ -3,7 +3,7 @@
 // the `canvas` native bindings for image decoding, which Edge cannot run.
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { NoFaceDetectedError, computeFaceDescriptor, isValidDescriptor } from "../lib/face.js";
-import { saveReferenceEmbedding } from "../lib/store.js";
+import { isValidCaseId, saveReferenceEmbedding } from "../lib/store.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -39,6 +39,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { caseId } = req.body;
+
+  if (!isValidCaseId(caseId)) {
+    res.status(400).json({ error: "invalid_case_id", detail: "letters, numbers, - and _ only" });
+    return;
+  }
 
   // Client already computed the embedding (e.g. in-browser scan) — the photo was
   // never sent to us at all. This is the preferred path.

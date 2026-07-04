@@ -33,11 +33,39 @@ async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
 }
 
+// Case IDs come straight from request bodies and get interpolated into
+// filesystem paths below — without this, a caseId like "../../etc/passwd"
+// (or any path separator/dot-segment) would escape EVIDENCE_DIR/REFERENCE_DIR
+// entirely. Enforced here, at the one place every path gets built, so every
+// current and future caller of this module is protected, not just whichever
+// API route happens to validate its own input today.
+const CASE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
+
+/** True only for a caseId safe to use as a filename component. */
+export function isValidCaseId(caseId: string): boolean {
+  return CASE_ID_PATTERN.test(caseId);
+}
+
+export class InvalidCaseIdError extends Error {
+  constructor() {
+    super("invalid_case_id");
+    this.name = "InvalidCaseIdError";
+  }
+}
+
+function assertValidCaseId(caseId: string): void {
+  if (!isValidCaseId(caseId)) {
+    throw new InvalidCaseIdError();
+  }
+}
+
 function evidencePath(caseId: string): string {
+  assertValidCaseId(caseId);
   return path.join(EVIDENCE_DIR, `${caseId}.json`);
 }
 
 function referencePath(caseId: string): string {
+  assertValidCaseId(caseId);
   return path.join(REFERENCE_DIR, `${caseId}.json`);
 }
 

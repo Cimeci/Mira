@@ -75,6 +75,22 @@ describe("POST /api/verify", () => {
     expect(res.body).toMatchObject({ error: "invalid_embedding" });
   });
 
+  it("rejects a path-traversal caseId with a clean 400, not a 500", async () => {
+    const res = mockRes();
+    await verifyHandler(
+      mockReq("POST", {
+        caseId: "../../.mira_reference/other-case",
+        sourceUrl: "https://example.test",
+        imageBase64: "x",
+        referenceEmbedding: Array(128).fill(0),
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "invalid_case_id" });
+  });
+
   it("returns no_reference_enrolled when no override is given and nothing was enrolled for this case", async () => {
     const res = mockRes();
     await verifyHandler(

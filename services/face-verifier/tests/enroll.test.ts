@@ -58,6 +58,17 @@ describe("POST /api/enroll", () => {
     expect(await loadReferenceEmbedding(caseId)).toBeNull();
   });
 
+  it("rejects a path-traversal caseId with a clean 400, not a 500", async () => {
+    const res = mockRes();
+    await enrollHandler(
+      mockReq("POST", { caseId: "../../.mira_reference/other-case", embedding: Array(128).fill(0) }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toMatchObject({ error: "invalid_case_id" });
+  });
+
   it("rejects a body with neither embedding nor imageBase64", async () => {
     const res = mockRes();
     await enrollHandler(mockReq("POST", { caseId: testCaseId() }), res);
