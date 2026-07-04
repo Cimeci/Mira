@@ -16,3 +16,6 @@ __pycache__/
 
 # Captures runtime du locator (générées à chaque scan, jamais versionnées)
 mira/web/static/shots/
+
+# Profil de navigateur persistant : contient les COOKIES DE SESSION (secrets !)
+.mira_browser_profile/

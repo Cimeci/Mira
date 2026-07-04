@@ -22,8 +22,8 @@ from google import genai
 from google.genai import types
 from playwright.async_api import async_playwright
 
-from .actions import VIEWPORT
 from .agent import _api_key, _config, _run_cu_loop
+from .browser import open_page
 from .scraper import _resolve_creds, _validate_url, extract_images, extract_links
 
 # Curseurs par défaut calibrés démo (chaque page ≈ 20-40 s en Computer Use).
@@ -107,8 +107,7 @@ async def stream_crawl(
         client = genai.Client(api_key=key)
         config = _config()
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            page = await browser.new_page(viewport=VIEWPORT)
+            page, close_browser = await open_page(pw)
             try:
                 while frontier and len(visited) < max_pages:
                     url, depth = frontier.popleft()
@@ -167,6 +166,6 @@ async def stream_crawl(
                     ],
                 }
             finally:
-                await browser.close()
+                await close_browser()
     except Exception as exc:  # noqa: BLE001 — toute erreur remonte à l'UI
         yield {"type": "error", "message": f"{type(exc).__name__}: {exc}"}

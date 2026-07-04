@@ -16,7 +16,8 @@ from google import genai
 from google.genai import types
 from playwright.async_api import Page, async_playwright
 
-from .actions import VIEWPORT, exec_action
+from .actions import exec_action
+from .browser import open_page
 from .live import data_uri
 from .models import ScrapedImage, ScrapeResult
 from .scraper import _resolve_creds, _validate_url, extract_images
@@ -170,8 +171,7 @@ async def stream_scrape_cu(
         client = genai.Client(api_key=key)
         config = _config()
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            page = await browser.new_page(viewport=VIEWPORT)
+            page, close_browser = await open_page(pw)
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=20_000)
                 yield {"type": "note", "text": f"navigate → {url}"}
@@ -196,7 +196,7 @@ async def stream_scrape_cu(
                     ],
                 }
             finally:
-                await browser.close()
+                await close_browser()
     except Exception as exc:  # noqa: BLE001 — toute erreur remonte à l'UI
         yield {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
 
