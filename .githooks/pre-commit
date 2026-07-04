@@ -1,0 +1,13 @@
+#!/bin/sh
+# pre-commit — interdit de committer directement sur main (garde précoce).
+# On code toujours sur une branche <lane>/<slug>, jamais sur main.
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+
+if [ "$branch" = "main" ]; then
+  echo "✋ Commit direct sur 'main' interdit." >&2
+  echo "   Crée une branche d'abord : git checkout -b <lane>/<slug>" >&2
+  exit 1
+fi
+
+exit 0

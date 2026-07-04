@@ -1,41 +1,53 @@
-# mira — frontend
+# 🏆 Mira — RAISE Hackathon 2026 (Cockpit)
 
-Next.js (App Router, TypeScript, Tailwind) implementation of the Mira victim-facing
-prototype, built from the Claude Design handoff bundle.
+> Workspace de build, équipe de 5. Ship une démo qui **marche**. Submission **dimanche 12h00**.
+> Repo : `github.com/Cimeci/Mira` · Archi & moteur → `ARCHITECTURE.md` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
 
-## Run
+**Une grande partie du code se fait avec Claude Code** (pas obligatoire). Si tu l'utilises : ouvre-le dans ce dossier, il lit `CLAUDE.md` automatiquement et connaît d'entrée toutes les règles, le workflow git et le standard de code. Dis-lui juste ta lane (Core/Backend/UI/Infra/Démo). Les mêmes règles s'appliquent si tu codes à la main.
 
+## ▶️ Lancer le squelette (tourne sur la stdlib, zéro install)
 ```bash
-cd frontend
-npm install
-npm run dev      # http://localhost:3000
-npm run build    # production build (passes clean: no type/lint errors)
+python3.11 -m mira.demo      # joue les 3 beats de démo (tout mocké)
+# ou, environnement complet :
+bash setup.sh && source .venv/bin/activate
+python -m mira.demo ; pytest -q ; ruff check .
 ```
+Le pipeline `Mandate → Locate → Analyze → Notify` tourne end-to-end avec des **mocks**. Chaque lane remplace le mock de son stage par le vrai, derrière les interfaces gelées de `mira/types.py`. Guardrails Mira dans `CLAUDE.md`.
 
-## Flow (one route per screen)
+## ⏱️ Timeline (4–5 juil, venue ferme 22h sam / rouvre 7h dim)
 
-| Route | Screen |
-|-------|--------|
-| `/` | landing — punchline, typed terminal, impact counters, CTA |
-| `/start` | start case — what happened, url list, discovery chips |
-| `/actions` | action options — "do everything" + toggleable paths |
-| `/mandate` | sign the mandate — scroll-gated contract + signature pad |
-| `/signature` | facial signature — KYC face-scan modal (real camera + demo fallback) |
-| `/case` | case created — case card, status, timeline |
+| Bloc | Objectif |
+|------|----------|
+| **Sam matin (dès 8h30)** | Choisir track + problem statement · lock l'idée · scaffold + 1er déploiement Vercel vide |
+| **Sam aprem** | **Vertical slice end-to-end qui tourne** (le chemin de démo). Rien d'autre ne compte tant que ça ne marche pas. |
+| **Sam soir (hors site)** | Élargir la démo · brancher la stack sponsor à fond · fiabiliser |
+| **Dim matin** | Freeze features 10h. Polish démo · enregistrer **vidéo 1 min** · répéter pitch 3 min |
+| **Dim 12h00** | **SUBMIT** (form + vidéo + repo public) |
 
-`/signature` requires a signed mandate; visiting it unsigned redirects to `/mandate`.
+## ✅ Checklist submission
+- [ ] Repo **public** + **LICENSE MIT** (déjà en place)
+- [ ] Démo live déployée (Vercel preview URL) qui tourne sans toi
+- [ ] Vidéo 1 min (Loom/YT) — montre le résultat, pas le code
+- [ ] Pitch 3 min prêt : problème → démo → pourquoi ça claque sur la stack sponsor
+- [ ] Formulaire de soumission rempli
+- [ ] README repo : quoi + comment lancer + quelle stack sponsor
 
-## Structure
+## 🖥️ Frontend (surface victime, Next.js)
+```bash
+cd frontend && npm install && npm run dev   # http://localhost:3000
+```
+Landing → start → actions → mandat → signature faciale → case. Détails : `frontend/README.md`.
 
-- `app/` — one folder per route (App Router)
-- `components/ui/` — shared primitives (Button, Input, Chip, Panel, …)
-- `components/layout/` — ScreenShell, Header, Footer, ProgressBar, Logo
-- `components/{landing,start,actions,mandate,signature,case}/` — page composites
-- `lib/` — flow context (shared state / mandate gate) + hooks (count-up, reduced-motion)
-- Design tokens live in `tailwind.config.ts` + `app/globals.css` (from `design.md`); no motion library — CSS keyframes + rAF only.
+## 📌 Statut projet
+- **Track** : Safety, Compliance & Agentic AI
+- **Idée** : Mira — agent assistif *consent-first* qui aide une victime de deepfake sexuel non consenti à en obtenir le retrait sous droit EU (RGPD/DSA/loi SREN).
+- **Pipeline** : Mandate → Locate → Analyze → Notify (consent unlocks autonomy).
+- **Chemin de démo (3 beats)** : (1) pas de mandat → l'agent refuse · (2) pipeline complet → notice DSA dans l'inbox · (3) flag mineur → halt + escalade, zéro stockage.
+- **Surface démo** : Next.js (`frontend/`) + FastAPI SSE (`mira/api.py`)
+- **URL démo** : _TBD_
 
-## Privacy note
+## 🚫 Rappels qui disqualifient
+NEW WORK ONLY (zéro Softcallia/code existant) · 100% OSS/MIT · pas de RAG basique / Streamlit / image analyzer / chatbot générique / CV screener / conseil médical.
 
-The face-scan captures frames to an in-memory canvas only — nothing is uploaded,
-and the media stream is stopped on cancel/error/completion/unmount, matching the
-design's client-side-only requirement.
+→ Architecture technique (agents + computer use Gemini + infra + légal) : `ARCHITECTURE.md`
+→ Détails orga + playbook skills : `CHEATSHEET.md`

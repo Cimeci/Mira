@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mira — Locator</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="stage">
+    <header class="brand">
+      <div class="mark">MIRA</div>
+      <p class="tagline">Locator · balayage d'images piloté agent</p>
+    </header>
+
+    <form class="commandform" method="get" action="/live">
+      <div class="commandbar">
+        <span class="prompt">▸</span>
+        <input
+          class="url-input"
+          type="text"
+          name="url"
+          value="{{ default_url }}"
+          placeholder="mock host de démo (cible par défaut)"
+          spellcheck="false"
+          autocomplete="off"
+          autofocus
+          aria-label="URL à analyser"
+        />
+        <button class="scan" type="submit">Explorer</button>
+      </div>
+    </form>
+
+    <p class="hint">
+      <strong>Crawler agentique</strong> — Gemini explore l'URL (login, scroll), suit les
+      liens du même domaine, et collecte les images de proche en proche (borné :
+      6&nbsp;pages, profondeur&nbsp;2).
+      <br />Banc de test : <a href="/live?url={{ mock_url }}">lancer sur le mock host</a>.
+    </p>
+
+    <div class="mode">
+      <span class="dot"></span> moteur : <strong>Gemini Computer Use</strong> — navigation 100% agentique
+    </div>
+  </main>
+</body>
+</html>

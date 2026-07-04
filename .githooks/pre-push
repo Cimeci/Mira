@@ -1,0 +1,18 @@
+#!/bin/sh
+# pre-push — interdit tout push direct vers main.
+# main ne se met à jour QUE par merge d'une PR (voir CONTRIBUTING.md §1).
+# Installé via `git config core.hooksPath .githooks` (fait par setup.sh).
+
+protected="refs/heads/main"
+
+while read -r _local_ref _local_oid remote_ref _remote_oid; do
+  if [ "$remote_ref" = "$protected" ]; then
+    echo "✋ Push direct sur 'main' bloqué." >&2
+    echo "   main doit rester déployable → passe par une branche + PR." >&2
+    echo "   git checkout -b <lane>/<slug>" >&2
+    echo "   git push -u origin <lane>/<slug> && gh pr create --fill" >&2
+    exit 1
+  fi
+done
+
+exit 0

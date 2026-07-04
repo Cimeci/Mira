@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------ *
+ * Mira design tokens — mirrors project/uploads/design.md.
+ * Kept as CSS variables so effects (glow, clip, scanlines) that don't
+ * map cleanly to Tailwind theme values still reference tokens, not literals.
+ * ------------------------------------------------------------------ */
+:root {
+  --mira-void: #0b0710;
+  --mira-void-deep: #06040a;
+  --mira-night: #140e1f;
+  --mira-purple-steel: #1e132b;
+  --mira-neon-purple: #6b2fa5;
+  --mira-electric-lilac: #b56bff;
+  --mira-lilac-glow: #d7b3ff;
+  --mira-luminance: #f2e6ff;
+  --mira-muted-text: #9a8aae;
+  --mira-muted-dim: #6e5f82;
+  --mira-disabled: #4b4058;
+  --mira-panel-border: #6f3e91;
+
+  --mira-glow-soft: 0 0 8px rgba(181, 107, 255, 0.45),
+    0 0 18px rgba(107, 47, 165, 0.35);
+  --mira-glow-strong: 0 0 6px rgba(242, 230, 255, 0.8),
+    0 0 14px rgba(181, 107, 255, 0.75), 0 0 28px rgba(107, 47, 165, 0.55);
+  --mira-text-glow: 0 0 4px rgba(242, 230, 255, 0.9),
+    0 0 12px rgba(181, 107, 255, 0.75);
+  --mira-border-glow: 0 0 0 1px rgba(181, 107, 255, 0.9),
+    0 0 12px rgba(181, 107, 255, 0.55);
+
+  /* clipped, beveled CRT-pixel button silhouette */
+  --mira-clip-button: polygon(
+    8px 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    8px 100%,
+    0 calc(100% - 8px),
+    0 8px
+  );
+
+  /* flowing neon gradient shared by every "hot" CTA */
+  --mira-flow-gradient: linear-gradient(
+    100deg,
+    #140e1f 0%,
+    #2a1840 18%,
+    #6b2fa5 32%,
+    #b56bff 42%,
+    #6b2fa5 52%,
+    #2a1840 66%,
+    #140e1f 100%
+  );
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--mira-void-deep);
+  color: var(--mira-luminance);
+}
+
+/* ------------------------------------------------------------------ *
+ * Reusable component classes (built from tokens, no inline duplication)
+ * ------------------------------------------------------------------ */
+@layer components {
+  /* clipped silhouette shared by primary/secondary/back buttons */
+  .mira-clip {
+    clip-path: var(--mira-clip-button);
+  }
+
+  /* flowing neon gradient CTA (start a case, continue, sign, take live picture) */
+  .mira-cta-flow {
+    background: var(--mira-flow-gradient);
+    background-size: 200% 100%;
+    animation: flow 3.2s linear infinite;
+  }
+  .mira-cta-flow:hover {
+    animation-duration: 1.4s;
+  }
+
+  /* scanline overlay — brand moments only */
+  .mira-scanlines::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(242, 230, 255, 0.06) 0px,
+      rgba(242, 230, 255, 0.06) 1px,
+      transparent 2px,
+      transparent 5px
+    );
+    mix-blend-mode: screen;
+    opacity: 0.35;
+  }
+
+  .mira-input {
+    width: 100%;
+    background: var(--mira-night);
+    color: var(--mira-luminance);
+    border: 1px solid rgba(181, 107, 255, 0.35);
+    border-radius: 6px;
+    font-family: var(--font-plex-mono), "Courier New", monospace;
+    outline: none;
+  }
+  .mira-input::placeholder {
+    color: var(--mira-muted-text);
+  }
+  .mira-input:focus {
+    border-color: var(--mira-electric-lilac);
+    box-shadow: var(--mira-border-glow);
+  }
+}
+
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: var(--mira-text-glow);
+  }
+  .text-shadow-title {
+    text-shadow: 0 0 4px rgba(242, 230, 255, 0.7),
+      0 0 14px rgba(181, 107, 255, 0.6);
+  }
+}
+
+/* purple scrollbar for scrollable regions (mandate document) */
+[data-mira-scroll]::-webkit-scrollbar {
+  width: 6px;
+}
+[data-mira-scroll]::-webkit-scrollbar-thumb {
+  background: rgba(181, 107, 255, 0.5);
+  border-radius: 3px;
+}
+[data-mira-scroll]::-webkit-scrollbar-track {
+  background: rgba(181, 107, 255, 0.08);
+}
+
+/* honor reduced-motion globally for the ambient loops */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
