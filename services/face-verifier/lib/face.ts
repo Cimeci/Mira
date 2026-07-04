@@ -86,17 +86,10 @@ export async function computeFaceDescriptor(buffer: Buffer): Promise<Float32Arra
   return detection.descriptor;
 }
 
-export function euclideanDistance(a: Float32Array | number[], b: Float32Array | number[]): number {
-  if (a.length !== b.length) {
-    throw new Error(`descriptor length mismatch: ${a.length} vs ${b.length}`);
-  }
-  let sumSquares = 0;
-  for (let i = 0; i < a.length; i++) {
-    const diff = a[i] - b[i];
-    sumSquares += diff * diff;
-  }
-  return Math.sqrt(sumSquares);
-}
+// face-api.js already exports this (same sum-of-squared-differences + sqrt,
+// same length-mismatch guard) — re-exporting instead of hand-rolling a second
+// copy that could silently drift from what the rest of the library assumes.
+export const euclideanDistance = faceapi.euclideanDistance;
 
 /** Monotonic 0-1 display score from a distance — NOT what match/no-match decisions
  * are based on (that's MATCH_DISTANCE_THRESHOLD on the raw distance). */
