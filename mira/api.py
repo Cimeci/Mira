@@ -13,9 +13,15 @@ bloque au gate sur un `asyncio.Future` que `POST /confirm` vient résoudre.
 
 Flux de démo (beat 2/3, sur mocks) :
   POST /cases                    -> crée un case, lance le pipeline en tâche de fond
-  GET  /cases/{id}/events (SSE)  -> timeline temps réel : un message par transition
+  GET  /cases/{id}               -> état courant du case (pour un montage propre du front)
+  GET  /cases/{id}/events (SSE)  -> timeline, REJOUÉE du début à chaque (re)connexion
   POST /cases/{id}/confirm       -> résout le gate G-7 (verdict victime) -> dispatch
   GET  /healthz                  -> sonde de vie
+
+Reconnexion / F5 (robustesse démo) : chaque case garde l'historique append-only de ses
+messages et le rejoue à toute nouvelle connexion SSE, puis diffuse le live à CHAQUE
+abonné (fan-out — plusieurs onglets/écrans sans se voler d'events). Un rafraîchissement
+de page ne repart donc pas d'une timeline vide.
 
 Contrat SSE (un objet JSON par `data:`), discriminé par `kind` :
   {"kind":"stage",  "event": StageEvent.to_dict()}      — transition d'état (rendu L3)
@@ -63,27 +69,69 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Sentinelle de fin de flux : distingue « plus d'événements » d'un message vide.
+# Sentinelle de fin de flux : marqueur de contrôle poussé aux abonnés (jamais dans
+# l'historique), pour distinguer « le case est terminé » d'un message vide.
 _STREAM_END = object()
+
+# Statuts au-delà desquels le gate n'est plus ouvert : la notice en attente est purgée.
+_GATE_CLOSED = frozenset({"CONFIRMED", "DECLINED", "NOTIFIED"})
 
 
 @dataclass
 class CaseRun:
-    """État en mémoire d'un case en cours. Mono-process, suffisant pour la démo.
+    """État en mémoire d'un case. Mono-process, suffisant pour la démo.
 
-    `queue` : messages SSE prêts à pousser (dict, ou _STREAM_END pour fermer le flux).
-    `confirmations` : un Future par média en attente du gate G-7, clé = source_url.
+    Modèle pub/sub minimal pour survivre à un F5 :
+      `history`     — tous les messages publiés (append-only), rejoués à la connexion ;
+      `subscribers` — une file par flux SSE actif (fan-out : plusieurs écrans possibles) ;
+      `confirmations` — un Future par média au gate G-7, clé = source_url (inchangé) ;
+      `pending_notice` / `last_status` / `statuses` — état courant, exposé par GET /cases/{id}.
     """
 
     case_id: str
-    queue: asyncio.Queue = field(default_factory=asyncio.Queue)
+    history: list[dict] = field(default_factory=list)
+    subscribers: set[asyncio.Queue] = field(default_factory=set)
     confirmations: dict[str, asyncio.Future[bool]] = field(default_factory=dict)
     finished: bool = False
+    last_status: str | None = None
+    pending_notice: dict | None = None
+    statuses: dict[str, str] = field(default_factory=dict)
 
 
 # Registre des cases. Pas de purge (hackathon, mono-process) : à remettre à plat au
 # redémarrage. Le case_id est opaque (aucune PII, cf. contrat types.Mandate).
 _RUNS: dict[str, CaseRun] = {}
+
+
+def _publish(run: CaseRun, msg: dict) -> None:
+    """Ajoute un message à l'historique du case et le diffuse à tous les abonnés SSE.
+
+    Sync (pas d'await) : appelable depuis l'emit du pipeline (contrat events.Emit).
+    Met aussi à jour l'état courant lu par GET /cases/{id}.
+    """
+    run.history.append(msg)
+    kind = msg["kind"]
+    if kind == "stage":
+        run.last_status = msg["event"]["to_status"]
+        if run.last_status in _GATE_CLOSED:
+            run.pending_notice = None  # le gate s'est refermé (accepté/refusé)
+    elif kind == "notice":
+        run.pending_notice = {"url": msg["url"], "text": msg["text"]}
+    elif kind == "done":
+        run.statuses = msg["statuses"]
+        run.pending_notice = None
+    for q in run.subscribers:
+        q.put_nowait(msg)
+
+
+def _close(run: CaseRun) -> None:
+    """Signale la fin du flux à tous les abonnés actifs (marqueur hors historique)."""
+    for q in run.subscribers:
+        q.put_nowait(_STREAM_END)
+
+
+def _sse(msg: dict) -> str:
+    return f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
 
 
 class CaseRequest(BaseModel):
@@ -132,28 +180,25 @@ def _build_mandate(req: CaseRequest, case_id: str) -> Mandate:
 def _confirm_for(run: CaseRun, source_url: str):
     """Fabrique le callback `confirm` async attendu par le Notifier (gate G-7).
 
-    Il pousse la notice au front (canal du gate) puis attend le verdict humain via un
-    Future résolu par POST /confirm. Le timeout fail-closed est géré côté notifier
+    Il publie la notice (canal du gate) puis attend le verdict humain via un Future
+    résolu par POST /confirm. Le timeout fail-closed est géré côté notifier
     (config.CONFIRM_TIMEOUT_S) : ici on attend simplement.
     """
     fut: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
     run.confirmations[source_url] = fut
 
     async def confirm(notice: str) -> bool:
-        await run.queue.put(
-            {"kind": "notice", "case_id": run.case_id, "url": source_url, "text": notice}
-        )
+        _publish(run, {"kind": "notice", "case_id": run.case_id, "url": source_url, "text": notice})
         return await fut
 
     return confirm
 
 
 async def _run_pipeline(run: CaseRun, mandate: Mandate) -> None:
-    """Tâche de fond : déroule le pipeline et déverse chaque transition dans la queue SSE."""
+    """Tâche de fond : déroule le pipeline et diffuse chaque transition aux abonnés SSE."""
 
     def emit(event: StageEvent) -> None:
-        # emit est sync (contrat events.Emit) ; put_nowait sur queue non bornée = sûr.
-        run.queue.put_nowait({"kind": "stage", "event": event.to_dict()})
+        _publish(run, {"kind": "stage", "event": event.to_dict()})
 
     try:
         records = await run_until_gate(mandate, emit=emit)
@@ -163,14 +208,15 @@ async def _run_pipeline(run: CaseRun, mandate: Mandate) -> None:
                 confirm = _confirm_for(run, record.source_url)
                 result = await dispatch(record, mandate, confirm=confirm, emit=emit)
                 statuses[result.source_url] = result.status.value
-        await run.queue.put({"kind": "done", "case_id": run.case_id, "statuses": statuses})
+        _publish(run, {"kind": "done", "case_id": run.case_id, "statuses": statuses})
     except Exception as exc:  # noqa: BLE001 — toute panne devient un event SSE terminal, jamais un silence
-        await run.queue.put(
-            {"kind": "error", "case_id": run.case_id, "message": f"{type(exc).__name__}: {exc}"}
+        _publish(
+            run,
+            {"kind": "error", "case_id": run.case_id, "message": f"{type(exc).__name__}: {exc}"},
         )
     finally:
         run.finished = True
-        await run.queue.put(_STREAM_END)
+        _close(run)
 
 
 @app.get("/healthz")
@@ -191,6 +237,26 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
     asyncio.create_task(_run_pipeline(run, mandate))
     return {
         "case_id": case_id,
+        "state_url": f"/cases/{case_id}",
+        "events_url": f"/cases/{case_id}/events",
+        "confirm_url": f"/cases/{case_id}/confirm",
+    }
+
+
+@app.get("/cases/{case_id}")
+async def get_case(case_id: str) -> dict[str, object]:
+    """État courant d'un case — ce que le front lit au montage pour se synchroniser."""
+    run = _RUNS.get(case_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"case inconnu : {case_id}")
+    return {
+        "case_id": run.case_id,
+        "finished": run.finished,
+        "current_status": run.last_status,
+        "statuses": run.statuses,
+        # Gate ouvert ? La notice à afficher est dans pending_notice (None sinon).
+        "awaiting_confirm": [url for url, fut in run.confirmations.items() if not fut.done()],
+        "pending_notice": run.pending_notice,
         "events_url": f"/cases/{case_id}/events",
         "confirm_url": f"/cases/{case_id}/confirm",
     }
@@ -198,17 +264,33 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
 
 @app.get("/cases/{case_id}/events")
 async def stream_events(case_id: str) -> StreamingResponse:
-    """Flux SSE des messages du case (single-consumer : un front à la fois en démo)."""
+    """Flux SSE : rejoue l'historique complet à la connexion, puis suit le live.
+
+    Fan-out : chaque connexion a sa PROPRE file (pas de vol d'events entre onglets/F5).
+    """
     run = _RUNS.get(case_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"case inconnu : {case_id}")
 
     async def gen() -> AsyncIterator[str]:
-        while True:
-            msg = await run.queue.get()
-            if msg is _STREAM_END:
-                break
-            yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+        queue: asyncio.Queue = asyncio.Queue()
+        # S'abonner AVANT de figer le backlog : aucun await entre les deux -> pas de
+        # course (mono-loop), donc ni event perdu ni doublon (le live va dans `queue`).
+        run.subscribers.add(queue)
+        backlog = list(run.history)
+        already_done = run.finished
+        try:
+            for msg in backlog:
+                yield _sse(msg)
+            if already_done:
+                return
+            while True:
+                msg = await queue.get()
+                if msg is _STREAM_END:
+                    break
+                yield _sse(msg)
+        finally:
+            run.subscribers.discard(queue)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
 

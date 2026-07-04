@@ -14,8 +14,24 @@ Lancer : `python -m mira.api` (ou `uvicorn mira.api:app --reload`) → `http://1
 |--------|-------|------|
 | `GET`  | `/healthz` | sonde de vie → `{"status":"ok"}` |
 | `POST` | `/cases` | crée un case, lance le pipeline en tâche de fond |
-| `GET`  | `/cases/{id}/events` | flux **SSE** de la timeline (un front à la fois) |
+| `GET`  | `/cases/{id}` | **état courant** du case (à lire au montage du front) |
+| `GET`  | `/cases/{id}/events` | flux **SSE**, rejoué du début à chaque (re)connexion |
 | `POST` | `/cases/{id}/confirm` | verdict victime au gate G-7 |
+
+### `GET /cases/{id}`
+
+État à consulter au montage de la page (ou après un F5) pour se resynchroniser sans
+attendre le SSE :
+
+```json
+{ "case_id":"…", "finished":false, "current_status":"AWAITING_CONFIRM",
+  "statuses":{}, "awaiting_confirm":["https://…/x.jpg"],
+  "pending_notice":{"url":"https://…/x.jpg","text":"Objet : …"},
+  "events_url":"…", "confirm_url":"…" }
+```
+
+`pending_notice` est non-null uniquement quand le gate G-7 est ouvert (à afficher +
+proposer Approuver/Refuser). `statuses` se remplit à la fin (`done`).
 
 ### `POST /cases`
 
@@ -73,7 +89,8 @@ curl -s -XPOST localhost:8000/cases/$CID/confirm -H 'content-type: application/j
 ## Limites connues (assumées — hackathon)
 
 - État **en mémoire, mono-process** : redémarrage = reset ; pas de purge des cases.
-- SSE **single-consumer** : un seul front par case à la fois (suffisant pour la démo).
+- SSE **multi-consumer avec replay** : chaque (re)connexion rejoue l'historique complet
+  puis suit le live (F5 / 2ᵉ écran OK). L'historique n'est pas borné (mono-process, démo).
 - `MIRA_DEMO_MODE=1` plancher le timeout du gate à 900 s (la notice reste à l'écran).
 - **CORS** ouvert par défaut (dev) pour qu'un front sur une autre origine (Next.js :3000)
   puisse appeler l'API. Restreindre au besoin : `MIRA_CORS_ORIGINS="https://mon-front"`.
