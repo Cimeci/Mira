@@ -1,0 +1,45 @@
+name: PR guard
+# Rejette les PR mal formées AVANT merge (titre non conventionnel, mauvaise base).
+# À requérir comme status check dans la branch protection de main pour bloquer le merge.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Valider titre, base et branche
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          fail=0
+
+          # 1. La PR doit cibler main.
+          if [ "$BASE_REF" != "main" ]; then
+            echo "::error::La PR doit cibler 'main' (base actuelle : $BASE_REF)."
+            fail=1
+          fi
+
+          # 2. Titre = Conventional Commits (même règle que le hook commit-msg).
+          if ! printf '%s' "$PR_TITLE" | grep -Eq '^(feat|fix|chore|refactor|docs|test|perf|ci)(\([a-z0-9._-]+\))?!?: .+'; then
+            echo "::error::Titre de PR non conforme : \"$PR_TITLE\""
+            echo "::error::Format attendu : <type>(scope): message — ex : feat(l3): hero section"
+            fail=1
+          fi
+
+          # 3. Nom de branche <lane>/<slug> — avertissement seulement (n'échoue pas).
+          if ! printf '%s' "$HEAD_REF" | grep -Eq '^l[1-5]/[a-z0-9._-]+$'; then
+            echo "::warning::Nom de branche inhabituel : \"$HEAD_REF\" (attendu : l1../l5/<slug>)."
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::PR mal formée — corrige le titre/la base puis relance."
+            exit 1
+          fi
+          echo "✅ PR bien formée."
