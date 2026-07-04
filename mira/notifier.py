@@ -20,7 +20,11 @@ import asyncio
 import inspect
 import os
 import re
+import json
+import logging
+from urllib.parse import urlparse
 from collections.abc import Awaitable, Callable
+import httpx
 
 from . import config
 from .events import Emit, make_event, print_emitter
@@ -60,6 +64,8 @@ _PENALTY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+_logger = logging.getLogger("mira.notifier")
+
 
 def assert_no_invented_penalty(text: str) -> str:
     """Garde-fou G-9 : refuse tout texte qui parle de pénalité. À appliquer sur TOUTE
@@ -71,9 +77,33 @@ def assert_no_invented_penalty(text: str) -> str:
     return text
 
 
-def _resolve_host(url: str) -> str:
-    """MOCK RDAP. Le vrai : RDAP -> contact DSA publié -> abuse@ en fallback."""
-    return "abuse@mock-host.local"
+async def _resolve_host(url: str) -> str:
+    """Résolution RDAP (RFC 9083). Le vrai : RDAP -> contact DSA publié -> abuse@ en fallback."""
+    try:
+        domain = urlparse(url).hostname
+        if not domain:
+            return "abuse@mock-host.local"
+    except Exception:
+        return "abuse@mock-host.local"
+        
+    if domain.endswith(".local") or os.getenv("RDAP_OFFLINE", "1") == "1":
+        return f"abuse@{domain}"
+        
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"https://rdap.org/domain/{domain}")
+            resp.raise_for_status()
+            data = resp.json()
+            # Simplification: on cherche la première entité avec role 'abuse' et son email
+            for entity in data.get("entities", []):
+                if "abuse" in entity.get("roles", []):
+                    for vcard in entity.get("vcardArray", [[]])[1]:
+                        if vcard[0] == "email":
+                            return vcard[3]
+    except Exception as e:
+        _logger.warning(f"[NOTIFIER] Echec RDAP pour {domain}: {e}")
+    
+    return f"abuse@{domain}"
 
 
 # Ligne « Notifiant » par rôle de mandant : formulations FACTUELLES uniquement —
@@ -135,7 +165,14 @@ def draft(record: ForensicRecord, mandate: Mandate) -> str:
     # G-6/G-7 : aucune notice sur un cas non vérifié (ESCALATED/REJECTED) — même en appel direct.
     if record.status is not Status.VERIFIED:
         raise ValueError(f"draft() refusé : record {record.case_id} non VERIFIED (G-6/G-7).")
-    host = _resolve_host(record.source_url)
+    # En mode sync pour draft, on fait un mock car RDAP est async.
+    # L'envoi fera la vraie resolution.
+    try:
+        domain = urlparse(record.source_url).hostname
+        host = f"abuse@{domain}" if domain else "abuse@mock-host.local"
+    except Exception:
+        host = "abuse@mock-host.local"
+        
     return _draft_dsa_notice(record, host, mandate)
 
 
@@ -164,7 +201,7 @@ async def send(
     # envoyer pour un cas non vérifié.
     if record.status is not Status.VERIFIED:
         raise ValueError(f"send() refusé : record {record.case_id} non VERIFIED (G-6/G-7).")
-    host = _resolve_host(record.source_url)
+    host = await _resolve_host(record.source_url)
     log(f"[NOTIFY] hôte résolu : {host}")
 
     # G-7 : gate de confirmation de la victime avant tout envoi externe.
@@ -208,7 +245,37 @@ async def send(
         from_status=Status.AWAITING_CONFIRM,
         payload={"url": record.source_url},
     ))
-    # MOCK dispatch. Le vrai : Resend/portail vers l'inbox de démo uniquement.
+    
+    # Real dispatch logic
+    demo_inbox = os.getenv("DEMO_TARGET_INBOX")
+    api_key = os.getenv("RESEND_API_KEY")
+    
+    if api_key:
+        if not demo_inbox:
+            raise ValueError("DEMO_TARGET_INBOX manquant avec RESEND_API_KEY présente (G-12)")
+        
+        target_email = demo_inbox
+        sender = os.getenv("NOTICE_SENDER_EMAIL", "notices@project-mira.example")
+        
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "from": f"{NOTIFIER_NAME} <{sender}>",
+                        "to": target_email,
+                        "subject": "Notification de contenu illicite (DSA, art. 16) — retrait demandé",
+                        "text": notice
+                    }
+                )
+                resp.raise_for_status()
+        except Exception as e:
+            _logger.error(f"[NOTIFIER] Erreur Resend: {e}")
+            raise ValueError(f"Erreur d'envoi Resend: {e}")
+    else:
+        _logger.info(f"[NOTIFIER] MOCK envoi à {host} (Resend non configuré)")
+    
     emit(make_event(
         record.case_id,
         "notifier",
@@ -217,7 +284,9 @@ async def send(
         detail=f"[NOTIFY] notice DSA envoyée à {host}",
         payload={"url": record.source_url},
     ))
-    return _record(record, host, notice, Status.NOTIFIED)
+    notif_record = _record(record, host, notice, Status.NOTIFIED)
+    _log_transparency(notif_record)
+    return notif_record
 
 
 async def notify(
@@ -257,3 +326,15 @@ def _record(r: ForensicRecord, host: str, notice: str, status: Status) -> Notifi
         dispatched_ts_utc=utcnow(),
         status=status,
     )
+
+def _log_transparency(record: NotificationRecord):
+    os.makedirs("_transparency", exist_ok=True)
+    entry = {
+        "case_id": record.case_id,
+        "status": record.status.value,
+        "host_contact": record.host_contact,
+        "dispatched_ts_utc": record.dispatched_ts_utc.isoformat(),
+        "ai_transparency": "prepared with AI assistance, human reviewed"
+    }
+    with open("_transparency/transparency_log.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
