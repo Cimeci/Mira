@@ -1,4 +1,5 @@
 import { GlowBackdrop } from "@/components/ui/GlowBackdrop";
+import { Footer } from "@/components/layout/Footer";
 import { Scanlines } from "@/components/ui/Scanlines";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { Wordmark } from "@/components/landing/Wordmark";
@@ -31,7 +32,7 @@ export default function LandingScreen() {
         </LinkButton>
       </div>
 
-      <footer className="mt-auto flex w-full justify-center border-t border-[rgba(181,107,255,0.22)] bg-[rgba(20,14,31,0.6)] px-5 py-[18px]">
+      <Footer className="py-[18px]">
         <div className="flex items-center gap-3 text-body-sm leading-[1.45] text-mira-muted-text">
           <span className="text-mira-lilac-glow">◆</span>
           <span>
@@ -40,7 +41,7 @@ export default function LandingScreen() {
           </span>
           <span className="inline-block h-[15px] w-2 animate-blink bg-mira-electric-lilac shadow-glow-soft" />
         </div>
-      </footer>
+      </Footer>
     </div>
   );
 }

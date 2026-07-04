@@ -27,6 +27,7 @@ const config: Config = {
           "muted-dim": "#6E5F82", // secondary muted used across the prototype
           disabled: "#4B4058",
           "panel-border": "#6F3E91",
+          danger: "#FF6B8A", // form / auth error text
           paper: "#F2EDE0", // mandate contract sheet
           "paper-ink": "#241A2E",
           "paper-muted": "#6d5f7a",

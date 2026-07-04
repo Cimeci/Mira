@@ -22,3 +22,6 @@ mira/web/static/shots/
 
 # Plan de travail perso (non commité — cf. en-tête du fichier)
 PLAN.local.md
+
+# Artefact incrémental de tsc --noEmit (jamais versionné)
+*.tsbuildinfo
