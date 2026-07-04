@@ -63,8 +63,12 @@ function serveStatic(req: IncomingMessage, res: ServerResponse): boolean {
   const relative = urlPath === "/" ? "/scan.html" : urlPath;
   const filePath = path.join(PUBLIC_DIR, relative);
 
-  // Prevent path traversal outside PUBLIC_DIR.
-  if (!filePath.startsWith(PUBLIC_DIR) || !existsSync(filePath) || !statSync(filePath).isFile()) {
+  // Prevent path traversal outside PUBLIC_DIR. A plain startsWith(PUBLIC_DIR)
+  // would also match a sibling directory sharing the same string prefix (e.g.
+  // "public-evil" starts with "public") — require an exact match or a real
+  // path-separator boundary.
+  const isInsidePublicDir = filePath === PUBLIC_DIR || filePath.startsWith(PUBLIC_DIR + path.sep);
+  if (!isInsidePublicDir || !existsSync(filePath) || !statSync(filePath).isFile()) {
     return false;
   }
 
