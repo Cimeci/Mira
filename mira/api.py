@@ -29,9 +29,11 @@ Contrat SSE (un objet JSON par `data:`), discriminé par `kind` :
   {"kind":"done",   "case_id","statuses":{url:status}}  — pipeline terminé, flux fermé
   {"kind":"error",  "case_id","message"}                — exception -> event terminal
 
-La notice DSA ne transite JAMAIS dans un `StageEvent` (règle G-6, cf. mira/events.py) :
-elle passe par le canal du gate (`kind:"notice"`), fourni par le Notifier au callback
-`confirm`. Aucun octet d'image ni PII ne circule ici — uniquement url / statut / notice.
+Canal de la notice DSA : elle passe par le gate (`kind:"notice"`, fourni par le Notifier
+au callback `confirm`). La pile L1 (PR #12) ajoute AUSSI un StageEvent stage='notice'
+pré-gate portant notice_text — exception unique documentée dans mira/events.py ; les
+deux canaux portent le MÊME texte (une seule rédaction, notifier.draft). Aucun octet
+d'image ni PII ne circule ici — uniquement url / statut / notice.
 """
 
 from __future__ import annotations
@@ -39,9 +41,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,6 +105,24 @@ class CaseRun:
 # Registre des cases. Pas de purge (hackathon, mono-process) : à remettre à plat au
 # redémarrage. Le case_id est opaque (aucune PII, cf. contrat types.Mandate).
 _RUNS: dict[str, CaseRun] = {}
+
+# Références fortes sur les pipelines de fond : asyncio ne garde qu'une référence
+# faible sur les Tasks — sans ce set, un case peut être garbage-collecté en plein vol
+# (bloqué à jamais, sans log). Retiré automatiquement à la fin de chaque run.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+# Le case_id vient du client et finit dans un chemin fichier (.mira_consent/<id>.json) :
+# format strict à la frontière, tout le reste est un 400 (path traversal sinon).
+_CASE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+# G-2/G-12 à la frontière API : seuls les hosts de démo peuvent entrer dans un scope.
+# Aujourd'hui le locator est un mock ; dès qu'il devient réel (PR #17), cette allow-list
+# est la seule chose qui empêche POST /cases de faire crawler un vrai site.
+_ALLOWED_SCOPE_HOSTS = frozenset(
+    h.strip().lower()
+    for h in os.getenv("MIRA_ALLOWED_SCOPE_HOSTS", "mock-host.local").split(",")
+    if h.strip()
+)
 
 
 def _publish(run: CaseRun, msg: dict) -> None:
@@ -166,6 +188,16 @@ def _build_mandate(req: CaseRequest, case_id: str) -> Mandate:
     """
     if req.scope_urls is None:
         return create_demo_mandate(case_id=case_id)
+    for url in req.scope_urls:
+        host = (urlparse(url).hostname or "").lower()
+        if host not in _ALLOWED_SCOPE_HOSTS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"scope hors allow-list démo (G-2/G-12) : {host or url!r} — "
+                    "hosts autorisés via MIRA_ALLOWED_SCOPE_HOSTS"
+                ),
+            )
     try:
         return capture_consent(
             case_id=case_id,
@@ -201,12 +233,26 @@ async def _run_pipeline(run: CaseRun, mandate: Mandate) -> None:
         _publish(run, {"kind": "stage", "event": event.to_dict()})
 
     try:
-        records = await run_until_gate(mandate, emit=emit)
+        gate_result = await run_until_gate(mandate, emit=emit)
+        # Compat transitoire : la pile L1 (PR #12) fait renvoyer (records, notices) à
+        # run_until_gate — avant son merge c'est encore une simple liste. Accepter les
+        # deux formes garde main déployable quel que soit l'ordre d'atterrissage ;
+        # à simplifier en dépaquetage direct une fois la pile L1 sur main.
+        if isinstance(gate_result, tuple):
+            records, notices = gate_result
+        else:
+            records, notices = gate_result, {}
         statuses: dict[str, str] = {r.source_url: r.status.value for r in records}
         for record in records:
             if record.status is Status.VERIFIED:
                 confirm = _confirm_for(run, record.source_url)
-                result = await dispatch(record, mandate, confirm=confirm, emit=emit)
+                notice = notices.get(record.source_url)
+                if notice is None:
+                    result = await dispatch(record, mandate, confirm=confirm, emit=emit)
+                else:
+                    # La notice pré-rédigée passe TELLE QUELLE (positionnel, compat
+                    # signature pré-pile) : aperçu == envoyé, octet pour octet.
+                    result = await dispatch(record, mandate, notice, confirm=confirm, emit=emit)
                 statuses[result.source_url] = result.status.value
         _publish(run, {"kind": "done", "case_id": run.case_id, "statuses": statuses})
     except Exception as exc:  # noqa: BLE001 — toute panne devient un event SSE terminal, jamais un silence
@@ -229,12 +275,20 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
     """Crée un case, lance le pipeline en tâche de fond, renvoie ses URLs de suivi."""
     req = req or CaseRequest()
     case_id = req.case_id or _new_case_id()
+    if not _CASE_ID_RE.fullmatch(case_id):
+        # Fail-fast AVANT toute écriture : le case_id finit dans un chemin fichier.
+        raise HTTPException(
+            status_code=400,
+            detail="case_id invalide : ^[A-Za-z0-9_-]{1,64}$ attendu",
+        )
     if case_id in _RUNS:
         raise HTTPException(status_code=409, detail=f"case_id déjà utilisé : {case_id}")
     mandate = _build_mandate(req, case_id)
     run = CaseRun(case_id=case_id)
     _RUNS[case_id] = run
-    asyncio.create_task(_run_pipeline(run, mandate))
+    task = asyncio.create_task(_run_pipeline(run, mandate))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {
         "case_id": case_id,
         "state_url": f"/cases/{case_id}",

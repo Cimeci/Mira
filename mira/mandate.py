@@ -64,6 +64,13 @@ def _write_consent_artifact(mandate: Mandate) -> Path:
     }
     CONSENT_ARTIFACT_DIR.mkdir(exist_ok=True)
     path = CONSENT_ARTIFACT_DIR / f"{mandate.case_id}.json"
+    # Défense en profondeur : le case_id peut venir d'une frontière externe (API L2) —
+    # même si elle valide déjà son format, RIEN ne doit jamais s'écrire hors du dossier.
+    if path.resolve().parent != CONSENT_ARTIFACT_DIR.resolve():
+        raise ValueError(
+            f"case_id invalide (écriture hors de {CONSENT_ARTIFACT_DIR}/ refusée) : "
+            f"{mandate.case_id!r}"
+        )
     path.write_text(json.dumps(artifact, sort_keys=True), encoding="utf-8")
     return path
 
