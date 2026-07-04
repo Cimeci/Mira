@@ -1,5 +1,5 @@
 import { createCanvas } from "canvas";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NoFaceDetectedError, computeFaceDescriptor, euclideanDistance } from "../lib/face.js";
 
 /** Synthetic non-face fixture — confirms the model pipeline loads and runs without
@@ -23,6 +23,33 @@ describe("computeFaceDescriptor", () => {
   it("loads the models and throws NoFaceDetectedError on a non-face image", async () => {
     const buf = noisePng(128);
     await expect(computeFaceDescriptor(buf)).rejects.toThrow(NoFaceDetectedError);
+  }, 20_000);
+});
+
+describe("model loading retry", () => {
+  beforeEach(() => {
+    // Fresh module instance so the model-loaded cache starts at null — otherwise
+    // an earlier test's successful load would short-circuit before ever calling
+    // the mocked loadFromDisk below.
+    vi.resetModules();
+  });
+
+  it("does not permanently cache a rejected model-load promise after a transient failure", async () => {
+    const faceapi = await import("face-api.js");
+    const spy = vi.spyOn(faceapi.nets.tinyFaceDetector, "loadFromDisk").mockRejectedValueOnce(new Error("boom"));
+
+    const fresh = await import("../lib/face.js");
+    const buf = noisePng(128);
+
+    await expect(fresh.computeFaceDescriptor(buf)).rejects.toThrow("boom");
+
+    spy.mockRestore();
+
+    // A second call must retry from scratch rather than rethrowing the same
+    // stale "boom" forever — getting NoFaceDetectedError here means it got past
+    // model loading and failed only on "no face in this synthetic image", which
+    // is the expected, correct outcome.
+    await expect(fresh.computeFaceDescriptor(buf)).rejects.toThrow(fresh.NoFaceDetectedError);
   }, 20_000);
 });
 

@@ -30,14 +30,24 @@ export function isValidDescriptor(value: unknown): value is number[] {
 let modelsLoaded: Promise<void> | null = null;
 
 /** Loads model weights once per cold start (module-level singleton) — avoids
- * re-reading ~7MB of weights from disk on every invocation of a warm function. */
+ * re-reading ~7MB of weights from disk on every invocation of a warm function.
+ *
+ * On failure, resets the cache to null before rethrowing: a transient error
+ * (e.g. the models directory not yet fully available on a cold container)
+ * must not permanently poison every future call in this warm instance — the
+ * next call should get a fresh attempt, not the same stale rejection forever. */
 function ensureModelsLoaded(): Promise<void> {
   if (!modelsLoaded) {
     modelsLoaded = Promise.all([
       faceapi.nets.tinyFaceDetector.loadFromDisk(MODELS_DIR),
       faceapi.nets.faceLandmark68Net.loadFromDisk(MODELS_DIR),
       faceapi.nets.faceRecognitionNet.loadFromDisk(MODELS_DIR),
-    ]).then(() => undefined);
+    ])
+      .then(() => undefined)
+      .catch((err) => {
+        modelsLoaded = null;
+        throw err;
+      });
   }
   return modelsLoaded;
 }
