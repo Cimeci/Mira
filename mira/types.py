@@ -8,17 +8,20 @@ propre à 5 (chacun code librement DANS son module, tant que l'interface tient).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
+
+# Base légale par défaut d'un mandat (G-9 : citations exactes, jamais générées par LLM).
+DEFAULT_LEGAL_BASIS = "Code pénal art. 226-8-1 (loi SREN n° 2024-449) ; DSA art. 16 ; LCEN."
 
 
 def utcnow() -> datetime:
     """Horodatage UTC (ISO 8601). Une seule source de temps dans tout le système."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-class Status(str, Enum):
+class Status(StrEnum):
     """États de la state machine (voir spec §10)."""
 
     MANDATED = "MANDATED"    # Stage 0 — consentement + scope enregistrés
@@ -26,7 +29,9 @@ class Status(str, Enum):
     VERIFIED = "VERIFIED"    # Stage 2 — adulte, deepfake confirmé, preuve minimale
     REJECTED = "REJECTED"    # Stage 2 — sous le seuil, rien stocké
     ESCALATED = "ESCALATED"  # Stage 2 — mineur suspecté -> halt + signalement
+    AWAITING_CONFIRM = "AWAITING_CONFIRM"  # Gate — notice prête, verdict victime attendu (G-7)
     CONFIRMED = "CONFIRMED"  # Gate — victime a approuvé la notice
+    DECLINED = "DECLINED"    # Gate — victime a refusé -> hold, rien n'est envoyé
     NOTIFIED = "NOTIFIED"    # Stage 3 — notice DSA envoyée
     REVOKED = "REVOKED"      # Mandat retiré -> purge
     FAILED = "FAILED"        # Erreur non récupérable
@@ -42,6 +47,8 @@ class Mandate:
     scope_urls: list[str]             # surfaces autorisées uniquement (pas le web ouvert)
     consent_artifact: Path | None = None  # preuve chiffrée du consentement
     active: bool = True               # False dès révocation
+    legal_basis: str = DEFAULT_LEGAL_BASIS  # citation source de la notice (G-9)
+    revoked_ts_utc: datetime | None = None  # quand le mandat a été révoqué (G-10)
 
 
 @dataclass
@@ -55,7 +62,7 @@ class MediaItem:
 
 @dataclass
 class ForensicRecord:
-    """Sortie de l'Analyzer (Stage 2). Preuve minimale : hash d'abord, jamais les octets bruts (G-5)."""
+    """Sortie de l'Analyzer (Stage 2). Preuve minimale : hash, jamais les octets bruts (G-5)."""
 
     case_id: str
     source_url: str
