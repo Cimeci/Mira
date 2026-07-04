@@ -6,6 +6,7 @@ strict DSA art.16 ; dispatch Resend vers l'inbox de démo uniquement (G-12).
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable
 
@@ -14,22 +15,35 @@ from .types import ForensicRecord, Mandate, NotificationRecord, Status, utcnow
 
 # --- G-9 : verrou d'exactitude légale -----------------------------------------------------
 # Citations JAMAIS générées par LLM — constantes figées, validées contre les textes
-# officiels (Légifrance : Code pénal art. 226-8-1 créé par la loi SREN n° 2024-449 du
-# 21 mai 2024 ; EUR-Lex : règlement (UE) 2022/2065 « DSA » art. 16 ; LCEN loi n° 2004-575).
-# Toute modification de ces constantes exige une relecture des sources officielles.
+# officiels le 2026-07-04 (Légifrance : Code pénal art. 226-8-1 créé par la loi SREN
+# n° 2024-449 du 21 mai 2024 ; EUR-Lex : règlement (UE) 2022/2065 « DSA » art. 16 ;
+# LCEN loi n° 2004-575). Toute modification exige une relecture des sources officielles.
 LEGAL_BASIS_CITATION = "Code pénal art. 226-8-1 (loi SREN n° 2024-449) ; DSA art. 16 ; LCEN."
-GOOD_FAITH_DECLARATION = (  # G-8, exigence LCEN
-    "Déclaration de bonne foi : le notifiant estime de bonne foi "
+GOOD_FAITH_DECLARATION = (  # exigence DSA art. 16(2)(d) (la LCEN renvoie au DSA depuis SREN)
+    "Déclaration de bonne foi (DSA art. 16(2)(d)) : le notifiant estime de bonne foi "
     "ces informations exactes et complètes."
 )
-AI_TRANSPARENCY_LINE = (  # AI Act
-    "Transparence (AI Act) : cette notification a été préparée par un système assisté par IA."
+AI_TRANSPARENCY_LINE = (
+    # Démarche VOLONTAIRE : l'AI Act art. 50 ne s'applique pas à une notification
+    # bilatérale revue par un humain — ne pas affirmer une obligation qui n'existe pas.
+    "Transparence (démarche volontaire) : cette notification a été préparée avec "
+    "l'assistance d'un système d'IA, puis revue et validée par la personne concernée "
+    "avant envoi."
 )
+
+# DSA art. 16(2)(c) : nom + adresse électronique du notifiant sont OBLIGATOIRES
+# (l'exception d'anonymat ne couvre que le CSAM, pas les deepfakes visant des adultes).
+# C'est le MANDATAIRE qui s'identifie — l'identité de la victime n'apparaît jamais.
+# Adresse .example (RFC 2606) par défaut : inbox de démo uniquement (G-12).
+NOTIFIER_NAME = os.getenv("MIRA_NOTIFIER_NAME", "Project Mira — mandataire de notification")
+NOTIFIER_EMAIL = os.getenv("MIRA_NOTIFIER_EMAIL", "notices@project-mira.example")
 
 # La notice ne mentionne JAMAIS de pénalité : citer une amende/peine (a fortiori
 # l'inventer) est le risque G-9 disqualifiant. Ce motif barre toute sortie LLM.
+# Frontières de mot sur les termes courts pour ne pas bloquer « européen » etc.
 _PENALTY_PATTERN = re.compile(
-    r"amende|euros|€|prison|emprisonnement|peine|sanction|\d[\d\s]*(?:€|euros)",
+    r"\bamendes?\b|\beuros?\b|€|\bprison\b|\bemprisonnement\b|\bréclusion\b"
+    r"|\bdétention\b|condamn|pénalit|\bpeines?\b|\bsanctions?\b|\d[\d\s]*(?:€|euros?)",
     re.IGNORECASE,
 )
 
@@ -80,6 +94,8 @@ def _legal_core(record: ForensicRecord, host: str, mandate: Mandate) -> str:
         f"Base légale : {mandate.legal_basis}\n"
         "Substantiation : deepfake sexuel non consenti d'une personne identifiée.\n"
         f"Notifiant : Project Mira, système assistif automatisé, {notifier_line}\n"
+        f"Identification du notifiant (DSA art. 16(2)(c)) : {NOTIFIER_NAME} — "
+        f"adresse électronique : {NOTIFIER_EMAIL}.\n"
         f"{GOOD_FAITH_DECLARATION}\n"
         f"Bloc de preuve : phash={record.perceptual_hash} ; "
         f"horodatage={record.discovery_ts_utc.isoformat()} ; "
