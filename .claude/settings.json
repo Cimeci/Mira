@@ -1,4 +1,5 @@
 {
+  "//": "Permissions PARTAGÉES de l'équipe Mira. Dev sûr en zéro-prompt (pas de rm/curl/open). Surcharges perso -> .claude/settings.local.json (gitignored).",
   "permissions": {
     "allow": [
       "Bash(pnpm:*)",
@@ -11,6 +12,9 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
       "Bash(gh repo:*)",
       "Bash(gh pr:*)",
       "Bash(vercel:*)",

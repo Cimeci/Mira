@@ -11,3 +11,4 @@ build/
 scratch/
 .venv/
 __pycache__/
+.claude/settings.local.json
