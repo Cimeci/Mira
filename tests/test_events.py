@@ -1,7 +1,8 @@
 """Tests du flux d'événements structurés (mira/events.py) — le contrat SSE de L2/L3.
 
-On teste les EVENTS, pas les records : le record retourné sur decline porte encore le
-statut CONFIRMED (bug connu, corrigé par la tâche l1-failed-handling suivante).
+On teste les EVENTS ici ; les records (dont le DECLINED exact sur refus) sont
+couverts par test_pipeline.py. Le gate G-7 étant async, les confirms sont des
+coroutines.
 """
 
 import asyncio
@@ -12,6 +13,14 @@ from mira.orchestrator import run
 from mira.types import Status
 
 
+async def _approve(notice: str) -> bool:
+    return True
+
+
+async def _decline(notice: str) -> bool:
+    return False
+
+
 def _run_collecting(mandate, *, confirm) -> list[StageEvent]:
     events: list[StageEvent] = []
     asyncio.run(run(mandate, confirm=confirm, log=lambda _msg: None, emit=events.append))
@@ -20,7 +29,7 @@ def _run_collecting(mandate, *, confirm) -> list[StageEvent]:
 
 def test_happy_path_emits_ordered_transitions():
     m = mandate_mod.create_demo_mandate()
-    events = _run_collecting(m, confirm=lambda notice: True)
+    events = _run_collecting(m, confirm=_approve)
     assert [e.to_status for e in events] == [
         Status.MANDATED,
         Status.LOCATED,
@@ -42,7 +51,7 @@ def test_happy_path_emits_ordered_transitions():
 def test_suspected_minor_emits_minimal_escalated_event():
     m = mandate_mod.create_demo_mandate(case_id="minor-events")
     m.scope_urls = ["https://mock-host.local/minor-case"]
-    events = _run_collecting(m, confirm=lambda notice: True)
+    events = _run_collecting(m, confirm=_approve)
     escalated = [e for e in events if e.to_status is Status.ESCALATED]
     assert escalated, "un flag mineur doit émettre ESCALATED"
     event = escalated[0]
@@ -54,7 +63,7 @@ def test_suspected_minor_emits_minimal_escalated_event():
 
 def test_decline_emits_declined_and_never_notified():
     m = mandate_mod.create_demo_mandate()
-    events = _run_collecting(m, confirm=lambda notice: False)
+    events = _run_collecting(m, confirm=_decline)
     statuses = [e.to_status for e in events]
     assert Status.DECLINED in statuses
     assert Status.NOTIFIED not in statuses

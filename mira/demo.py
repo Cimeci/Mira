@@ -23,9 +23,16 @@ async def main() -> None:
     # --- Beat 2 : happy path complet ---
     _banner("BEAT 2 — pipeline complet -> notice DSA")
     m = mandate_mod.create_demo_mandate()
-    print(f"[MANDATE] case={m.case_id} role={m.requester_role} active={m.active} scope={m.scope_urls}")
-    results = await run(m, confirm=lambda notice: True)
-    notice = next((r.notice_text for r in results if isinstance(getattr(r, "notice_text", None), str)), None)
+    print(
+        f"[MANDATE] case={m.case_id} role={m.requester_role} "
+        f"active={m.active} scope={m.scope_urls}"
+    )
+    # confirm par défaut (_auto_confirm, async) : la CLI approuve immédiatement.
+    results = await run(m)
+    notice = next(
+        (r.notice_text for r in results if isinstance(getattr(r, "notice_text", None), str)),
+        None,
+    )
     if notice:
         print("\n--- Notice générée (arrive dans l'inbox de démo) ---\n" + notice)
 
@@ -41,7 +48,7 @@ async def main() -> None:
     _banner("BEAT 3 — mineur suspecté -> halt + escalade")
     m3 = mandate_mod.create_demo_mandate(case_id="demo-minor")
     m3.scope_urls = ["https://mock-host.local/minor-case"]
-    results = await run(m3, confirm=lambda notice: True)
+    results = await run(m3)
     escalated = any(r.status is Status.ESCALATED for r in results if hasattr(r, "status"))
     print(f"\n[RÉSULTAT] escaladé et arrêté sans stockage : {escalated}")
 
