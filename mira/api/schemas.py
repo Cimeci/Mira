@@ -41,3 +41,19 @@ class CaseCreated(BaseModel):
 class CaseStateResponse(BaseModel):
     case_id: str
     status: str
+
+class MandateRequest(BaseModel):
+    requester_role: Literal['victim', 'legal_rep', 'authorized_ngo']
+    scope_urls: list[HttpUrl]
+    legal_basis: str
+    attestation: bool
+
+    @field_validator('scope_urls')
+    @classmethod
+    def validate_scope_urls(cls, v: list[HttpUrl]) -> list[HttpUrl]:
+        if not v:
+            raise ValueError("scope_urls cannot be empty")
+        for url in v:
+            if url.host != "mock-host.local":
+                raise ValueError("G-2/G-12: Only mock-host.local is allowed in demo mode")
+        return v

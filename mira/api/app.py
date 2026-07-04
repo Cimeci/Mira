@@ -182,3 +182,50 @@ async def confirm_case(case_id: str, req: ConfirmRequest):
         "notice_text": notif_record.notice_text,
         "host_contact": notif_record.host_contact
     }
+
+from mira.api.schemas import MandateRequest
+from mira import mandate as mandate_mod
+import uuid
+
+@app.post("/mandate")
+async def create_mandate(req: MandateRequest):
+    case_id = str(uuid.uuid4())
+    urls_str = [str(url) for url in req.scope_urls]
+    
+    try:
+        mand = mandate_mod.capture_consent(
+            case_id=case_id,
+            requester_role=req.requester_role,
+            scope_urls=urls_str,
+            legal_basis=req.legal_basis,
+            attestation=req.attestation
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    return {"case_id": mand.case_id, "status": "MANDATED"}
+
+from mira.api.store import purge
+from mira.events import make_event
+
+@app.post("/revoke/{case_id}")
+async def revoke_mandate(case_id: str):
+    try:
+        case = get_case(case_id)
+    except CaseNotFound:
+        raise HTTPException(status_code=404, detail="Case not found")
+        
+    case.mandate.revoke()
+    
+    if case.task and not case.task.done():
+        case.task.cancel()
+        
+    emit = make_logger(case.queue)
+    emit(make_event(case_id, "mandate", Status.REVOKED, from_status=Status.MANDATED, payload={"reason": "user_revoked"}))
+    
+    # We yield the cpu a bit so SSE can push the REVOKED event before purge drops the queue
+    await asyncio.sleep(0.1)
+    
+    purge(case_id)
+    
+    return {"status": "REVOKED"}
