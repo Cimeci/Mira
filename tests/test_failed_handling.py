@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from mira import analyzer, notifier
+from mira import analyzer, escalation, notifier
 from mira import mandate as mandate_mod
 from mira.orchestrator import ConsentError, dispatch, run, run_until_gate
 from mira.types import NotificationRecord, Status
@@ -90,6 +90,73 @@ def test_send_failure_returns_failed_notification(monkeypatch):
     assert len(failed_events) == 1
     assert failed_events[0].payload == {"stage": "notifier", "error_type": "ConnectionError"}
     assert _SECRET not in failed_events[0].detail
+
+
+def test_dispatch_draft_fallback_failure_returns_failed_notification(monkeypatch):
+    """Le fallback notice=None de dispatch (re-rédaction via draft) suit la même
+    politique de panne que send : FAILED propre, jamais de traceback ni de fuite."""
+    m = mandate_mod.create_demo_mandate(case_id="failed-draft")
+    records, _notices = asyncio.run(run_until_gate(m, log=_silent, emit=lambda _e: None))
+    record = next(r for r in records if r.status is Status.VERIFIED)
+
+    def exploding_draft(record, mandate):
+        raise RuntimeError(_SECRET)
+
+    monkeypatch.setattr(notifier, "draft", exploding_draft)
+
+    events = []
+    note = asyncio.run(
+        dispatch(record, m, confirm=_approve, log=_silent, emit=events.append)
+    )
+    # dispatch renvoie un NotificationRecord FAILED : rien n'est parti, pas de notice.
+    assert isinstance(note, NotificationRecord)
+    assert note.status is Status.FAILED
+    assert note.notice_text == ""
+    failed_events = [e for e in events if e.to_status is Status.FAILED]
+    assert len(failed_events) == 1
+    assert failed_events[0].payload == {"stage": "notifier", "error_type": "RuntimeError"}
+    assert _SECRET not in failed_events[0].detail
+
+
+def test_precheck_failure_escalates_instead_of_failed(monkeypatch):
+    """Précaution G-6 : un pré-check mineur EN PANNE ne peut pas exclure un mineur ->
+    le cas escalade (halt + signalement autorité), il ne devient jamais un FAILED
+    générique indiscernable d'un timeout CV."""
+
+    async def exploding_precheck(item):
+        raise TimeoutError(_SECRET)
+
+    def bomb_fetch(item):
+        raise RuntimeError("G-6 violé : _fetch_bytes appelé malgré la panne du pré-check")
+
+    monkeypatch.setattr(analyzer, "_phase_precheck_minor", exploding_precheck)
+    monkeypatch.setattr(analyzer, "_fetch_bytes", bomb_fetch)
+
+    escalated_case_ids = []
+    real_escalate = escalation.escalate
+
+    def spy_escalate(record, mandate, **kwargs):
+        escalated_case_ids.append(record.case_id)
+        return real_escalate(record, mandate, **kwargs)
+
+    monkeypatch.setattr(escalation, "escalate", spy_escalate)
+
+    m = mandate_mod.create_demo_mandate(case_id="failed-precheck")
+    events = []
+    records, notices = asyncio.run(run_until_gate(m, log=_silent, emit=events.append))
+
+    # Tous les items escaladent — aucun FAILED, aucune notice, aucune empreinte.
+    assert records and all(r.status is Status.ESCALATED for r in records)
+    assert notices == {}
+    assert all(r.perceptual_hash == "" and r.sha256_hash == "" for r in records)
+    assert not [e for e in events if e.to_status is Status.FAILED]
+    # Le signalement autorité est bien parti pour chaque record escaladé.
+    assert len(escalated_case_ids) == len(records)
+    # Event ESCALATED minimal (contrat events.py) : reason seulement, jamais le message.
+    escalated_events = [e for e in events if e.to_status is Status.ESCALATED]
+    assert len(escalated_events) == len(records)
+    assert all(e.payload == {"reason": "precheck_failure"} for e in escalated_events)
+    assert all(_SECRET not in e.detail for e in escalated_events)
 
 
 def test_consent_error_still_raises():

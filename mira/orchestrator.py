@@ -233,9 +233,11 @@ async def dispatch(
         raise ValueError(
             f"dispatch refusé : {record.source_url} hors scope du mandat (G-2)"
         )
-    if notice is None:
-        notice = notifier.draft(record, mandate)
     try:
+        # Le fallback de re-rédaction vit DANS le try : draft() réel (RDAP, template)
+        # peut tomber en panne comme send() — même politique, jamais de traceback live.
+        if notice is None:
+            notice = notifier.draft(record, mandate)
         return await notifier.send(notice, record, mandate, confirm=confirm, log=log, emit=emit)
     except _CONTRACT_ERRORS:
         raise
@@ -243,12 +245,13 @@ async def dispatch(
         _emit_failed(exc, case_id=record.case_id, stage="notifier",
                      from_status=Status.AWAITING_CONFIRM, emit=emit)
         # RIEN n'est parti. On garde la notice (déjà validée en aperçu) dans le record
-        # FAILED pour qu'un retry L2/L3 puisse réutiliser exactement le même texte.
+        # FAILED pour qu'un retry L2/L3 puisse réutiliser exactement le même texte —
+        # vide si la panne a eu lieu pendant la re-rédaction (fallback notice=None).
         return NotificationRecord(
             case_id=record.case_id,
             source_url=record.source_url,
             host_contact="",
-            notice_text=notice,
+            notice_text=notice or "",
             dispatched_ts_utc=utcnow(),
             status=Status.FAILED,
         )
