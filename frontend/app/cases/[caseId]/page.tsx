@@ -1,24 +1,10 @@
-import { redirect } from "next/navigation";
-import { getCase } from "@/lib/getCases";
-import { CaseStatusView } from "@/components/case/CaseStatusView";
+import { CaseDetailLive } from "@/components/case/CaseDetailLive";
 
 /**
- * Case detail. Renders the same "your case is open" view as the intake flow,
- * hydrated from the clicked case. Unknown ids redirect silently to /cases.
+ * Case detail route. Thin server wrapper: the live view (snapshot + SSE stream
+ * + G-7 approval gate) is a client component driven by the backend pipeline.
  */
-export default async function CaseDetailPage({
-  params,
-}: {
-  params: { caseId: string };
-}) {
-  const found = await getCase(params.caseId);
-  if (!found) redirect("/cases");
-
-  return (
-    <CaseStatusView
-      caseId={found.id}
-      targetLabel={found.platformLabel}
-      status={found.status}
-    />
-  );
+export default function CaseDetailPage({ params }: { params: { caseId: string } }) {
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE || "";
+  return <CaseDetailLive caseId={params.caseId} apiBase={apiBase} />;
 }

@@ -2,12 +2,12 @@ import { cn } from "@/lib/cn";
 import type { CaseStatus } from "@/lib/getCases";
 
 /**
- * Text color per status, drawn only from design tokens. Red is never used —
- * escalation reads as electric lilac like every other active state, and the
- * "awaiting your approval" accent is the same electric lilac plus a marker (see
- * below), not an alarm color.
+ * Text color per known status, drawn only from design tokens. Red is never
+ * used — escalation reads as electric lilac like every other active state, and
+ * the "awaiting your approval" accent is the same electric lilac plus a marker
+ * (see below), not an alarm color. Unknown/derived statuses fall back to muted.
  */
-const colorByStatus: Record<CaseStatus, string> = {
+const colorByStatus: Record<string, string> = {
   "collecting evidence": "text-mira-electric-lilac",
   "verifying match": "text-mira-electric-lilac",
   "awaiting your approval": "text-mira-electric-lilac",
@@ -29,7 +29,7 @@ export function StatusLabel({ status }: { status: CaseStatus }) {
     <span
       className={cn(
         "inline-flex items-center gap-2 font-mono text-body-sm",
-        colorByStatus[status]
+        colorByStatus[status] ?? "text-mira-muted-text"
       )}
     >
       {needsApproval && (
