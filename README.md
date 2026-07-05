@@ -19,9 +19,9 @@ gate        use        + minor      victim gate
              URLs only)
 ```
 
-1. **Mandate** — the victim submits a URL and signs a consent mandate (KYC face scan, with facial embeddings generated **client-side** — the image never leaves their device). Without an active mandate, nothing runs.
+1. **Mandate** — the victim submits a URL and signs a consent mandate (KYC face scan). A single webcam frame is turned into a **facial embedding** by the face-verifier and immediately discarded — the photo is never stored, only the embedding is kept. Without an active mandate, nothing runs.
 2. **Locate** — a computer-use agent visits **only the in-scope URLs**, behaves like a human (scroll, captcha), and collects candidate media. Read-only; it never judges the content or follows links off-scope.
-3. **Analyze** — runs a **minor pre-check first** (suspected minor → immediate halt + escalation, zero storage), then compares the victim's facial embeddings against the collected media and scores for deepfakes. Stores minimal proof (perceptual hash + URL + timestamp), never raw images.
+3. **Analyze** — runs a **minor pre-check first** (suspected minor → immediate halt + escalation, zero storage), then matches the victim's facial embeddings against the collected media (real **ArcFace** match), runs a **nudity/intent check**, and scores for deepfakes. Stores minimal proof (perceptual hash + URL + timestamp), never raw images.
 4. **Notify** — resolves the host, drafts a **DSA Article 16** takedown notice with a good-faith declaration and an AI-transparency line, then — **after the victim reviews and approves it** — files the report or emails the host. A re-check runs 7 days later to confirm the content is gone.
 
 What the victim *does*: paste a URL, sign, click "approve." What they **never** do: scroll the content, find the host, write legal text, or repeat it for every site.
@@ -31,9 +31,10 @@ What the victim *does*: paste a URL, sign, click "approve." What they **never** 
 - **Brain:** Gemini 2.5 Computer Use decides the on-screen action from a screenshot.
 - **Body:** Playwright (Chromium) executes the clicks/typing/scrolling inside an isolated, ephemeral browser sandbox — never on the victim's device.
 - **Runtime:** an async orchestrator enforces the consent gate once, spawns one sandbox per case, streams live agent state to the frontend, and tears everything down on completion or mandate revocation.
-- **Surfaces:** a Next.js frontend (`frontend/`) for the victim-facing flow and a FastAPI SSE backend (`mira/api.py`) that bridges the workflow to the UI.
+- **Identity:** a standalone Node **face-verifier** service (`services/face-verifier/`, `face-api.js`/ArcFace) turns a webcam frame into an embedding and matches it — `enroll` + `verify` only. The frontend reaches it through a **same-origin proxy** (`app/api/face/[action]`), so the raw photo is forwarded once, never stored, and there's no CORS to configure.
+- **Surfaces:** a Next.js frontend (`frontend/`) for the victim-facing flow — sign-up → mandate → facial signature → a live **`/cases` dashboard** where each case streams its agent state over **SSE** and opens the **G-7 approval gate** on the DSA notice — backed by a FastAPI SSE backend (`mira/api.py`).
 
-The `mira/` package runs the full `Mandate → Locate → Analyze → Notify` pipeline end-to-end on **mocks**, behind frozen interfaces in `mira/types.py` — so each stage can swap its mock for the real implementation without breaking the others.
+The `mira/` package runs the full `Mandate → Locate → Analyze → Notify` pipeline end-to-end behind frozen interfaces in `mira/types.py` — so each stage can swap its mock for the real implementation without breaking the others. The pieces that make the demo land are already real: the **identity match** runs on true facial embeddings (ArcFace, `mira/face.py` + the face-verifier service) and the **content check** calls a live nudity/intent classifier (Sightengine + Grok, `mira/vision.py`). The deepfake score, perceptual hash and host filing stay **mocked**, so the demo only ever touches a mock host + demo inbox (G-12).
 
 ## Run it
 
@@ -46,7 +47,9 @@ bash setup.sh && source .venv/bin/activate
 python -m mira.demo ; pytest -q ; ruff check .
 
 # Everything locally, one command:
-bash dev.sh                    # pipeline API :8000 · locator CU :8001 · face-verifier :3001
+#   (install the two Node surfaces once so dev.sh starts them, not skips them)
+(cd frontend && npm install) && (cd services/face-verifier && npm install)
+bash dev.sh                    # pipeline API :8000 · locator CU :8001 · frontend :3000 · face-verifier :3001
 
 # Frontend only:
 cd frontend && npm install && npm run dev   # http://localhost:3000
@@ -57,7 +60,7 @@ cd frontend && npm install && npm run dev   # http://localhost:3000
 - No agent runs without an active mandate — consent is the legal basis for processing the image at all (GDPR).
 - The Locator stays **strictly within the mandate's scope** — no open-web crawling.
 - Suspected minor → **halt and escalate**, never download / hash / store (potential CSAM is detected and reported, never handled).
-- Store URLs + perceptual hashes + client-side embeddings, **never raw images**; encrypt what little is kept.
+- Store URLs + perceptual hashes + facial embeddings, **never raw images**; encrypt what little is kept.
 - A victim confirmation gate precedes every external send; every notice cites the exact legal basis and never invents a penalty.
 - The demo targets a **mock host and a demo inbox only** — no real victim, no real content, no live hostile platform.
 

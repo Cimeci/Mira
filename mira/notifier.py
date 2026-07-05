@@ -18,13 +18,29 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import os
 import re
 from collections.abc import Awaitable, Callable
 
+import httpx
+from dotenv import dotenv_values
+
 from . import config
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, Mandate, NotificationRecord, Status, utcnow
+
+# Trace dev silencieuse en démo (même canal que l'orchestrateur) : les échecs d'envoi
+# réel partent en WARNING sur le logger "mira", jamais en traceback dans la sortie live.
+_logger = logging.getLogger("mira")
+
+_ENV_FILE = ".env.local"
+
+
+def _env(key: str) -> str | None:
+    """Clé de config : env process d'abord, puis `.env.local` (dev.sh n'exporte pas
+    le fichier). Même pattern que mira.db — une politique/clé, lue au plus près."""
+    return os.environ.get(key) or dotenv_values(_ENV_FILE).get(key) or None
 
 # --- G-9 : verrou d'exactitude légale -----------------------------------------------------
 # Citations JAMAIS générées par LLM — constantes figées, validées contre les textes
@@ -74,6 +90,47 @@ def assert_no_invented_penalty(text: str) -> str:
 def _resolve_host(url: str) -> str:
     """MOCK RDAP. Le vrai : RDAP -> contact DSA publié -> abuse@ en fallback."""
     return "abuse@mock-host.local"
+
+
+# Objet de la notice DSA — figé (cohérent avec la première ligne du corps, template G-9).
+_NOTICE_SUBJECT = "Notification de contenu illicite (DSA art. 16) — retrait demandé"
+
+
+async def _dispatch_via_resend(notice: str, *, log) -> str | None:
+    """Envoi RÉEL de la notice via Resend — best-effort. Retourne l'id du mail si envoyé,
+    None si Resend n'est pas configuré OU si l'envoi échoue (l'appelant retombe alors sur
+    l'event NOTIFIED sans envoi, jamais de démo cassée).
+
+    G-12 : destinataire = inbox de DÉMO uniquement (MIRA_DEMO_INBOX, défaut = l'expéditeur
+    lui-même), JAMAIS le contact réel d'un hôte. On n'envoie donc jamais vers une vraie
+    plateforme, même en prod.
+    """
+    api_key = _env("RESEND_API_KEY")
+    if not api_key:
+        return None  # non configuré -> fallback event (comportement historique)
+    # `from` : onboarding@resend.dev fonctionne SANS domaine vérifié (compte en mode test).
+    # Dès qu'un domaine est vérifié chez Resend, poser MIRA_RESEND_FROM=notices@ton-domaine.
+    sender = _env("MIRA_RESEND_FROM") or "onboarding@resend.dev"
+    # `to` : inbox de démo (G-12). En mode test Resend, ce DOIT être l'e-mail du compte.
+    inbox = _env("MIRA_DEMO_INBOX")
+    if not inbox:
+        log("[NOTIFY] MIRA_DEMO_INBOX absent -> pas d'envoi réel (fallback event)")
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"from": sender, "to": [inbox], "subject": _NOTICE_SUBJECT, "text": notice},
+            )
+            resp.raise_for_status()
+            return resp.json().get("id") or "sent"
+    except Exception as exc:  # noqa: BLE001 - best-effort : on ne casse jamais la démo
+        # Type d'erreur seulement (le message Resend peut contenir l'inbox) ; détail sur le
+        # logger dev. L'appelant émet quand même NOTIFIED (fallback event documenté).
+        _logger.warning("envoi Resend échoué (%s) -> fallback event NOTIFIED", type(exc).__name__)
+        log(f"[NOTIFY] envoi Resend indisponible ({type(exc).__name__}) -> fallback event")
+        return None
 
 
 # Ligne « Notifiant » par rôle de mandant : formulations FACTUELLES uniquement —
@@ -208,13 +265,20 @@ async def send(
         from_status=Status.AWAITING_CONFIRM,
         payload={"url": record.source_url},
     ))
-    # MOCK dispatch. Le vrai : Resend/portail vers l'inbox de démo uniquement.
+    # Envoi RÉEL via Resend (best-effort) vers l'inbox de démo (G-12) ; à défaut de clé
+    # ou en cas d'échec, on émet quand même NOTIFIED (fallback event, démo jamais cassée).
+    mail_id = await _dispatch_via_resend(notice, log=log)
+    detail = (
+        f"[NOTIFY] notice DSA envoyée via Resend (id={mail_id})"
+        if mail_id
+        else f"[NOTIFY] notice DSA transmise à {host}"
+    )
     emit(make_event(
         record.case_id,
         "notifier",
         Status.NOTIFIED,
         from_status=Status.CONFIRMED,
-        detail=f"[NOTIFY] notice DSA envoyée à {host}",
+        detail=detail,
         payload={"url": record.source_url},
     ))
     return _record(record, host, notice, Status.NOTIFIED)

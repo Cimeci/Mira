@@ -144,12 +144,19 @@ def capture_consent(
     return mandate
 
 
+# Surface du mandat de démo (G-12). Défaut = mock host fictif, cohérent avec le locator
+# en mode "mock". Pour un run end-to-end réel (MIRA_LOCATOR_MODE=crawl/cu), pointer sur
+# le mock host SERVI par mira/web, ex. MIRA_DEMO_SCOPE_URL=http://127.0.0.1:8001/mockhost/
+# — ce host (127.0.0.1) est déjà dans l'allow-list de mira.cu.guard.
+_DEMO_SCOPE_URL = os.getenv("MIRA_DEMO_SCOPE_URL", "https://mock-host.local/target")
+
+
 def create_demo_mandate(case_id: str = "demo-001") -> Mandate:
     """MOCK — mandat de démo pré-autorisé, scoped sur un mock host contrôlé (G-12)."""
     return capture_consent(
         case_id=case_id,
         requester_role="victim",
-        scope_urls=["https://mock-host.local/target"],
+        scope_urls=[_DEMO_SCOPE_URL],
         attestation=True,
     )
 
