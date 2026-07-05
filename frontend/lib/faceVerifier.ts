@@ -8,7 +8,9 @@
  * raw photo is decoded in-memory by the local service and never persisted.
  */
 
-const BASE = process.env.NEXT_PUBLIC_FACE_VERIFIER_BASE || "http://localhost:3001";
+// Same-origin proxy (see app/api/face/[action]/route.ts) — avoids CORS entirely:
+// the browser calls the app, Next forwards to the face-verifier server-side.
+const BASE = "/api/face";
 
 /** The enroll/verify APIs want raw base64; a canvas/blob data URL carries a prefix. */
 function stripDataUrl(dataUrl: string): string {
@@ -26,7 +28,7 @@ export async function enrollFace(
   imageDataUrl: string
 ): Promise<EnrollResult> {
   try {
-    const res = await fetch(`${BASE}/api/enroll`, {
+    const res = await fetch(`${BASE}/enroll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ caseId, imageBase64: stripDataUrl(imageDataUrl) }),
@@ -55,7 +57,7 @@ export async function verifyFace(params: {
   referenceEmbedding: number[];
 }): Promise<VerifyResult> {
   try {
-    const res = await fetch(`${BASE}/api/verify`, {
+    const res = await fetch(`${BASE}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
