@@ -30,7 +30,7 @@ from .scraper import _resolve_creds, _validate_url, extract_images, extract_link
 _MAX_PAGES = 6
 _MAX_DEPTH = 2
 _MAX_LINKS = 8
-_STEPS_PER_PAGE = 8
+_STEPS_PER_PAGE = 2000
 
 
 _DESCRIBE_MODEL = "gemini-2.5-flash"
