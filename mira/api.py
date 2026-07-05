@@ -118,13 +118,19 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 # format strict à la frontière, tout le reste est un 400 (path traversal sinon).
 _CASE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-# G-2/G-12 à la frontière API : seuls les hosts de démo peuvent entrer dans un scope.
-# Aujourd'hui le locator est un mock ; dès qu'il devient réel (PR #17), cette allow-list
-# est la seule chose qui empêche POST /cases de faire crawler un vrai site.
-_ALLOWED_SCOPE_HOSTS = frozenset(
-    h.strip().lower()
-    for h in os.getenv("MIRA_ALLOWED_SCOPE_HOSTS", "mock-host.local").split(",")
-    if h.strip()
+# G-2/G-12 à la frontière API : allow-list d'hosts OPTIONNELLE.
+# Décision produit (démo pratique) : par défaut on accepte toute URL http(s) bien formée
+# saisie par la victime — la bonne formation reste garantie en aval par
+# mandate._validate_scope (scheme http(s) + host absolu, pas de wildcard, fail-fast -> 400).
+# ⚠️ Le locator est ENCORE un mock : rien de réel n'est crawlé aujourd'hui. Dès qu'il
+# devient réel (PR #17), MIRA_ALLOWED_SCOPE_HOSTS DOIT être défini (ex. "mock-host.local") —
+# c'est alors la seule barrière qui empêche POST /cases de faire crawler un vrai site.
+# Non défini -> None -> aucune restriction d'host. Défini -> restriction stricte réactivée.
+_raw_allowed_hosts = os.getenv("MIRA_ALLOWED_SCOPE_HOSTS")
+_ALLOWED_SCOPE_HOSTS: frozenset[str] | None = (
+    frozenset(h.strip().lower() for h in _raw_allowed_hosts.split(",") if h.strip())
+    if _raw_allowed_hosts is not None
+    else None
 )
 
 
@@ -193,16 +199,19 @@ def _build_mandate(req: CaseRequest, case_id: str) -> Mandate:
     """
     if req.scope_urls is None:
         return create_demo_mandate(case_id=case_id)
-    for url in req.scope_urls:
-        host = (urlparse(url).hostname or "").lower()
-        if host not in _ALLOWED_SCOPE_HOSTS:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"scope hors allow-list démo (G-2/G-12) : {host or url!r} — "
-                    "hosts autorisés via MIRA_ALLOWED_SCOPE_HOSTS"
-                ),
-            )
+    # Restriction d'host uniquement si explicitement configurée (cf. _ALLOWED_SCOPE_HOSTS).
+    # Sinon, seule la bonne formation (capture_consent -> _validate_scope) est exigée.
+    if _ALLOWED_SCOPE_HOSTS is not None:
+        for url in req.scope_urls:
+            host = (urlparse(url).hostname or "").lower()
+            if host not in _ALLOWED_SCOPE_HOSTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"scope hors allow-list (G-2/G-12) : {host or url!r} — "
+                        "hosts autorisés via MIRA_ALLOWED_SCOPE_HOSTS"
+                    ),
+                )
     try:
         return capture_consent(
             case_id=case_id,

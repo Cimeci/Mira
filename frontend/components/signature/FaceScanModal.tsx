@@ -15,6 +15,9 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
     instruction,
     deniedMessage,
     demoLive,
+    faceFound,
+    searching,
+    faceHint,
     procBlocks,
     modalTitle,
     lensRing,
@@ -81,14 +84,19 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
               />
               {(show.video || demoLive) && (
                 <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2">
-                  {show.video ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(140,255,190,0.5)] bg-mira-void/80 px-2.5 py-1 text-[10px] uppercase tracking-label text-mira-success backdrop-blur">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mira-success" />
-                      live
-                    </span>
-                  ) : (
+                  {!show.video ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(255,198,92,0.5)] bg-mira-void/80 px-2.5 py-1 text-[10px] uppercase tracking-label text-mira-warn backdrop-blur">
                       demo · no camera
+                    </span>
+                  ) : searching ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(255,198,92,0.5)] bg-mira-void/80 px-2.5 py-1 text-[10px] uppercase tracking-label text-mira-warn backdrop-blur">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mira-warn" />
+                      looking for you…
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(140,255,190,0.5)] bg-mira-void/80 px-2.5 py-1 text-[10px] uppercase tracking-label text-mira-success backdrop-blur">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mira-success" />
+                      {faceFound ? "face detected ✓" : "live"}
                     </span>
                   )}
                 </div>
@@ -110,7 +118,15 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
                 </div>
               )}
               {show.oval && (
-                <div className="pointer-events-none absolute left-1/2 top-1/2 -ml-[65px] -mt-[85px] h-[170px] w-[130px] rounded-[50%] border-2 border-dashed border-[rgba(215,179,255,0.65)]" />
+                <div
+                  className="pointer-events-none absolute left-1/2 top-1/2 -ml-[65px] -mt-[85px] h-[170px] w-[130px] rounded-[50%] border-2 transition-colors duration-200"
+                  style={{
+                    borderStyle: faceFound ? "solid" : "dashed",
+                    borderColor: faceFound
+                      ? "rgba(140,255,190,0.85)"
+                      : "rgba(215,179,255,0.65)",
+                  }}
+                />
               )}
               <div className="pointer-events-none absolute inset-0 [background:repeating-linear-gradient(to_bottom,rgba(242,230,255,0.05)_0px,rgba(242,230,255,0.05)_1px,transparent_2px,transparent_5px)]" />
               {flash && (
@@ -162,6 +178,11 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
         >
           {instruction}
         </div>
+        {faceHint && (
+          <div className="-mt-2 max-w-[320px] text-center text-caption leading-[1.5] text-mira-muted-dim">
+            make sure your face is well lit and centered in the circle.
+          </div>
+        )}
         {show.counter && (
           <div className="text-caption text-mira-muted-text [font-variant-numeric:tabular-nums]">
             scanning… {litCount}/48

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFlow } from "@/lib/flow-context";
 import { ScreenTitle } from "@/components/ui/ScreenTitle";
 import { LinkButton } from "@/components/ui/LinkButton";
@@ -10,15 +10,55 @@ import { CaseCard } from "./CaseCard";
 
 type CreateState = "creating" | "ready" | "error";
 
+/** Placeholder shown only when the user opened a case without typing any url. */
+const DEMO_TARGET_LABEL = "mock-host.local/media/xyz789";
+
+/**
+ * Normalizes a user-typed url into an absolute http(s) url the backend will
+ * accept as scope, or null if it can't be one. A bare host ("site.com/x") is
+ * assumed https so pasting without a scheme still works. Kept lenient on the
+ * client; the backend (mandate._validate_scope) is the real gate.
+ */
+function normalizeUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    return url.hostname ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Compact host+path label for the case card (drops scheme and trailing slash). */
+function targetLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return (u.host + u.pathname).replace(/\/$/, "") || u.host;
+  } catch {
+    return url;
+  }
+}
+
 /**
  * Turns the narrative "your case is open" screen into a real case: it POSTs to
  * the backend once (guarded against StrictMode double-invoke and back-nav via
  * the flow context), so the case shows up on the dashboard and gets a live view.
  */
 export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
-  const { caseId, setCaseId } = useFlow();
+  const { caseId, setCaseId, urls } = useFlow();
   const [state, setState] = useState<CreateState>(caseId ? "ready" : "creating");
+  const [errorDetail, setErrorDetail] = useState("");
   const started = useRef(false);
+
+  // The real urls the user typed on /start become the case scope. Empty -> the
+  // backend falls back to the pre-authorized demo mandate (mock host).
+  const scopeUrls = useMemo(
+    () => urls.map(normalizeUrl).filter((u): u is string => u !== null),
+    [urls]
+  );
+  const displayUrl = scopeUrls[0] ? targetLabel(scopeUrls[0]) : DEMO_TARGET_LABEL;
 
   useEffect(() => {
     if (caseId) {
@@ -35,10 +75,24 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
         const res = await fetch(`${apiBase}/cases`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: "{}",
+          body: scopeUrls.length
+            ? JSON.stringify({ scope_urls: scopeUrls })
+            : "{}",
           signal: controller.signal,
         });
-        if (!res.ok) throw new Error(`status ${res.status}`);
+        if (!res.ok) {
+          // Surface the backend's reason (e.g. off-allow-list host) instead of a
+          // generic failure — a silent 400 during the demo is undebuggable.
+          let detail = `status ${res.status}`;
+          try {
+            const body = (await res.json()) as { detail?: string };
+            if (body?.detail) detail = body.detail;
+          } catch {
+            /* non-JSON error body — keep the status line */
+          }
+          setErrorDetail(detail);
+          throw new Error(detail);
+        }
         const data = (await res.json()) as { case_id: string };
         setCaseId(data.case_id);
         setState("ready");
@@ -48,7 +102,7 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
         clearTimeout(timer);
       }
     })();
-  }, [apiBase, caseId, setCaseId]);
+  }, [apiBase, caseId, setCaseId, scopeUrls]);
 
   const cardId =
     state === "ready" ? caseId : state === "error" ? "—" : "opening…";
@@ -65,7 +119,7 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
 
       <CaseCard
         caseId={cardId}
-        targetUrl="mock-host.local/media/xyz789"
+        targetUrl={displayUrl}
         status={cardStatus}
         interactive={false}
       />
@@ -97,8 +151,15 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
 
       {state === "error" && (
         <p className="text-caption text-mira-danger">
-          couldn&rsquo;t open a live case — is the backend running? start it with
-          <span className="font-mono"> bash dev.sh</span>, then reload.
+          {errorDetail
+            ? `couldn't open this case — ${errorDetail}`
+            : "couldn't open a live case — is the backend running?"}{" "}
+          {!errorDetail && (
+            <>
+              start it with <span className="font-mono">bash dev.sh</span>, then
+              reload.
+            </>
+          )}
         </p>
       )}
     </div>

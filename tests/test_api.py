@@ -16,6 +16,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import mira.api as api  # noqa: E402
@@ -86,24 +87,39 @@ def test_case_id_path_traversal_rejected():
         assert evil not in api._RUNS
 
 
-def test_scope_urls_outside_allowlist_rejected():
-    """G-2/G-12 à la frontière API : un scope hors allow-list démo est rejeté en 400 —
-    l'API ne doit jamais permettre de viser un vrai host, même quand le locator
-    deviendra réel (PR #17)."""
-    client = TestClient(app)
-    resp = client.post(
-        "/cases",
-        json={"case_id": "scope-evil", "scope_urls": ["https://vrai-site.example/x"]},
-    )
-    assert resp.status_code == 400
-    assert "scope-evil" not in api._RUNS
-
-
-def test_scope_urls_on_allowlist_accepted():
-    """Le host de démo (mock-host.local) passe l'allow-list : le chemin nominal reste ouvert."""
+def test_scope_urls_wellformed_accepted_by_default():
+    """Décision produit (démo pratique) : sans MIRA_ALLOWED_SCOPE_HOSTS, une URL http(s)
+    bien formée saisie par la victime devient le scope réel — plus de repli forcé sur le
+    mock host. La bonne formation reste exigée en aval (mandate._validate_scope)."""
     # Unitaire (pas de POST) : on valide _build_mandate sans lancer de tâche de fond.
-    req = api.CaseRequest(scope_urls=["https://mock-host.local/target/"], attestation=True)
-    mandate = api._build_mandate(req, "scope-ok")
+    req = api.CaseRequest(scope_urls=["https://vrai-site.example/photo"], attestation=True)
+    mandate = api._build_mandate(req, "scope-real")
+    assert mandate.scope_urls == ["https://vrai-site.example/photo"]
+
+
+def test_scope_urls_malformed_rejected():
+    """Fail-fast à la frontière : un scope malformé est un 400, jamais un case silencieux
+    (scheme non http(s), wildcard, chaîne quelconque)."""
+    client = TestClient(app)
+    for bad in ("ftp://x.example/y", "pas une url", "https://*.example/x"):
+        resp = client.post(
+            "/cases", json={"case_id": "scope-bad", "scope_urls": [bad]}
+        )
+        assert resp.status_code == 400, f"{bad!r} aurait dû être rejeté"
+        assert "scope-bad" not in api._RUNS
+
+
+def test_scope_urls_allowlist_enforced_when_configured(monkeypatch):
+    """G-2/G-12 : quand MIRA_ALLOWED_SCOPE_HOSTS est défini (prod / locator réel PR #17),
+    l'allow-list d'hosts se réactive et un host hors liste est rejeté en 400."""
+    monkeypatch.setattr(api, "_ALLOWED_SCOPE_HOSTS", frozenset({"mock-host.local"}))
+    off = api.CaseRequest(scope_urls=["https://vrai-site.example/x"], attestation=True)
+    with pytest.raises(HTTPException) as exc:
+        api._build_mandate(off, "scope-offlist")
+    assert exc.value.status_code == 400
+    # Le host sur liste passe : le chemin nominal reste ouvert même sous restriction.
+    on = api.CaseRequest(scope_urls=["https://mock-host.local/target/"], attestation=True)
+    mandate = api._build_mandate(on, "scope-onlist")
     assert mandate.scope_urls == ["https://mock-host.local/target/"]
 
 
