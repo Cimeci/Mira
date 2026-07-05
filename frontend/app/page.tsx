@@ -32,7 +32,7 @@ export default function LandingScreen() {
             start a case
           </LinkButton>
           <LinkButton
-            href="/dashboard"
+            href="/cases"
             variant="ghost"
             size="sm"
             className="text-mira-muted-text"
