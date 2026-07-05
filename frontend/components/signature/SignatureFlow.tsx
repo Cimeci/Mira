@@ -11,8 +11,11 @@ import { useFaceScan } from "./useFaceScan";
 
 export function SignatureFlow() {
   const router = useRouter();
-  const { mandateSigned } = useFlow();
-  const scan = useFaceScan(() => router.push("/case"));
+  const { mandateSigned, setFaceEmbedding } = useFlow();
+  const scan = useFaceScan((embedding) => {
+    setFaceEmbedding(embedding);
+    router.push("/case");
+  });
 
   // gate: the facial signature requires a signed mandate (mirrors goTo(4))
   useEffect(() => {

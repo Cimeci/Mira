@@ -7,8 +7,9 @@ import { LinkButton } from "@/components/ui/LinkButton";
 import { BackButton } from "@/components/ui/BackButton";
 import { Button } from "@/components/ui/Button";
 import { CaseCard } from "./CaseCard";
+import { verifyFace, fetchImageAsDataUrl } from "@/lib/faceVerifier";
 
-type CreateState = "creating" | "ready" | "error";
+type CreateState = "verifying" | "creating" | "ready" | "error" | "nomatch";
 
 /** Placeholder shown only when the user opened a case without typing any url. */
 const DEMO_TARGET_LABEL = "mock-host.local/media/xyz789";
@@ -48,9 +49,10 @@ function targetLabel(url: string): string {
  * the /cases dashboard.
  */
 export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
-  const { caseId, setCaseId, urls } = useFlow();
+  const { caseId, setCaseId, urls, faceEmbedding } = useFlow();
   const [state, setState] = useState<CreateState>(caseId ? "ready" : "creating");
   const [errorDetail, setErrorDetail] = useState("");
+  const [similarity, setSimilarity] = useState<number | null>(null);
   const started = useRef(false);
 
   // The real urls the user typed on /start become the case scope. Empty -> the
@@ -69,9 +71,33 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
     if (started.current) return;
     started.current = true;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
     (async () => {
+      // Face-match pre-check: only open a case if the suspected content actually
+      // contains the victim's scanned face. Skipped when there's no enrolled
+      // embedding (no-camera demo) or the content image can't be fetched (CORS /
+      // not a direct image) — we never fake a match, and never block silently.
+      const target = scopeUrls[0];
+      if (faceEmbedding && target) {
+        setState("verifying");
+        const image = await fetchImageAsDataUrl(target);
+        if (image) {
+          const v = await verifyFace({
+            caseId: "match-precheck",
+            sourceUrl: target,
+            imageDataUrl: image,
+            referenceEmbedding: faceEmbedding,
+          });
+          if (v.ok && !v.isMatch) {
+            setSimilarity(v.similarityScore);
+            setState("nomatch");
+            return;
+          }
+        }
+      }
+
+      setState("creating");
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
       try {
         const res = await fetch(`${apiBase}/cases`, {
           method: "POST",
@@ -103,7 +129,31 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
         clearTimeout(timer);
       }
     })();
-  }, [apiBase, caseId, setCaseId, scopeUrls]);
+  }, [apiBase, caseId, setCaseId, scopeUrls, faceEmbedding]);
+
+  if (state === "nomatch") {
+    const pct = similarity != null ? `${Math.round(similarity * 100)}%` : null;
+    return (
+      <div className="flex w-full flex-col gap-[22px] md:w-[400px] md:flex-shrink-0">
+        <ScreenTitle>no facial match</ScreenTitle>
+
+        <CaseCard caseId="—" targetLabel={displayUrl} status="no facial match" />
+
+        <p className="text-[14px] leading-[1.5] text-mira-muted-text">
+          this content doesn&rsquo;t appear to contain your face
+          {pct ? ` (similarity ${pct})` : ""}. mira only opens a case for content
+          that matches you — nothing was opened.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-[14px]">
+          <BackButton href="/signature" />
+          <LinkButton href="/start" variant="ghost" size="md">
+            try another link
+          </LinkButton>
+        </div>
+      </div>
+    );
+  }
 
   const cardId =
     state === "ready" ? caseId : state === "error" ? "—" : "opening…";
@@ -112,7 +162,9 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
       ? "evidence collection started"
       : state === "error"
         ? "mira api unreachable"
-        : "opening your case…";
+        : state === "verifying"
+          ? "checking for a facial match…"
+          : "opening your case…";
 
   return (
     <div className="flex w-full flex-col gap-[22px] md:w-[400px] md:flex-shrink-0">

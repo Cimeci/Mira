@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { prefersReducedMotion } from "@/lib/useReducedMotion";
+import { enrollFace, type EnrollResult } from "@/lib/faceVerifier";
 
 export type ScanPhase =
   | "closed"
@@ -11,7 +12,13 @@ export type ScanPhase =
   | "sweep"
   | "frozen"
   | "processing"
+  | "failed"
   | "done";
+
+// The scan enrolls under a stable throwaway id — only the returned embedding is
+// kept (carried in flow state and used as a verify override), so the persisted
+// reference id is irrelevant.
+const ENROLL_CASE_ID = "signature-scan";
 
 /**
  * Why the "denied" screen is showing — drives the message + guidance so the
@@ -137,7 +144,7 @@ function heuristicFacePresent(
  * The stream is stopped on cancel, error, completion, and unmount. When the
  * camera is blocked (e.g. sandboxed preview), it falls back to demo mode.
  */
-export function useFaceScan(onComplete: () => void) {
+export function useFaceScan(onComplete: (embedding: number[] | null) => void) {
   const [phase, setPhase] = useState<ScanPhase>("closed");
   const [modalIn, setModalIn] = useState(false);
   const [flash, setFlash] = useState(false);
@@ -151,7 +158,10 @@ export function useFaceScan(onComplete: () => void) {
   const [denyReason, setDenyReason] = useState<DenyReason>("");
   const [faceSeen, setFaceSeen] = useState(false);
   const [faceHint, setFaceHint] = useState(false);
+  const [scanError, setScanError] = useState("");
 
+  // Frontal frame (data URL) stashed for enrollment before frames are cleared.
+  const enrollImage = useRef<string>("");
   const video = useRef<HTMLVideoElement | null>(null);
   const frozenImg = useRef<HTMLImageElement | null>(null);
   const modal = useRef<HTMLDivElement | null>(null);
@@ -220,16 +230,26 @@ export function useFaceScan(onComplete: () => void) {
       setFrozenSrc("");
       setFaceSeen(false);
       setFaceHint(false);
+      setScanError("");
       if (finished !== true) trigger.current?.focus();
     },
     [stopCapture]
   );
 
   const startProcessing = useCallback(() => {
-    frames.current = [];
     setPhase("processing");
     setProc(0);
     setProcStage(0);
+    setScanError("");
+    // Enroll the live face while the "processing" animation plays: the verifier
+    // runs real face detection, so a hand or an empty frame is rejected here
+    // (no_face) — not by a client-side skin-tone guess. The no-camera demo path
+    // has no real frame, so it completes without a reference embedding.
+    const enrollP: Promise<EnrollResult | null> =
+      !demo && enrollImage.current
+        ? enrollFace(ENROLL_CASE_ID, enrollImage.current)
+        : Promise.resolve(null);
+    frames.current = [];
     const start = Date.now();
     timers.current.processing = setInterval(() => {
       const t = Math.min((Date.now() - start) / 5000, 1);
@@ -237,18 +257,33 @@ export function useFaceScan(onComplete: () => void) {
       setProcStage(Math.min(3, Math.floor(t * 4)));
       if (t >= 1) {
         clearInterval(timers.current.processing);
-        setPhase("done");
-        setTimeout(() => {
-          close(true);
-          completeRef.current();
-        }, 600);
+        enrollP.then((result) => {
+          if (result && !result.ok) {
+            setScanError(
+              result.reason === "no_face"
+                ? "no face detected — center your face in the circle and try again."
+                : "couldn't reach the face verifier — make sure it's running, then try again."
+            );
+            setPhase("failed");
+            return;
+          }
+          setPhase("done");
+          setTimeout(() => {
+            close(true);
+            completeRef.current(result?.ok ? result.embedding : null);
+          }, 600);
+        });
       }
     }, 120);
-  }, [close]);
+  }, [close, demo]);
 
   const finishSweep = useCallback(() => {
     const last = frames.current[frames.current.length - 1];
     const src = demo ? "" : last ? last.toDataURL("image/png") : "";
+    // Stash the frontal capture (first frame) for enrollment before startProcessing
+    // clears the buffer — a front-facing shot detects far better than a sweep angle.
+    const frontal = frames.current[0];
+    enrollImage.current = !demo && frontal ? frontal.toDataURL("image/png") : "";
     const proceed = () => {
       if (stream.current) {
         stream.current.getTracks().forEach((t) => t.stop());
@@ -369,6 +404,7 @@ export function useFaceScan(onComplete: () => void) {
   const startCamera = useCallback(async () => {
     setPhase("requesting");
     setDenyReason("");
+    setScanError("");
     if (FORCE_DEMO) {
       setDemo(true);
       beginPosition(true);
@@ -539,6 +575,7 @@ export function useFaceScan(onComplete: () => void) {
       litCount,
       instruction,
       deniedMessage,
+      failedMessage: scanError,
       procBlocks,
       demoLive,
       faceFound,
@@ -549,14 +586,20 @@ export function useFaceScan(onComplete: () => void) {
         : "scan your face",
       show: {
         modal: phase !== "closed",
-        lens: ["requesting", "denied", "position", "sweep", "frozen"].includes(
-          phase
-        ),
+        lens: [
+          "requesting",
+          "denied",
+          "position",
+          "sweep",
+          "frozen",
+          "failed",
+        ].includes(phase),
         video: !demo && ["position", "sweep"].includes(phase),
         frozen: !demo && phase === "frozen" && !!frozenSrc,
         eye: phase === "requesting" || demoLive,
         denied: phase === "denied",
-        tryAgain: phase === "denied",
+        failed: phase === "failed",
+        tryAgain: ["denied", "failed"].includes(phase),
         oval: phase === "position",
         counter: phase === "sweep",
         procArea: ["processing", "done"].includes(phase),
@@ -579,6 +622,7 @@ export function useFaceScan(onComplete: () => void) {
     denyReason,
     faceSeen,
     faceHint,
+    scanError,
   ]);
 
   return {

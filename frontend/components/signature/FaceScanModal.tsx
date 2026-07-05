@@ -14,6 +14,7 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
     litCount,
     instruction,
     deniedMessage,
+    failedMessage,
     demoLive,
     faceFound,
     searching,
@@ -115,6 +116,11 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
               {show.denied && (
                 <div className="px-6 text-center text-caption leading-[1.5] text-mira-muted-text">
                   {deniedMessage}
+                </div>
+              )}
+              {show.failed && (
+                <div className="px-6 text-center text-caption leading-[1.5] text-mira-danger">
+                  {failedMessage}
                 </div>
               )}
               {show.oval && (
