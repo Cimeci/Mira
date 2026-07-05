@@ -45,7 +45,7 @@ import re
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
@@ -289,7 +289,7 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
     if case_id in _RUNS:
         raise HTTPException(status_code=409, detail=f"case_id déjà utilisé : {case_id}")
     mandate = _build_mandate(req, case_id)
-    run = CaseRun(case_id=case_id, created_at=datetime.now(timezone.utc).isoformat())
+    run = CaseRun(case_id=case_id, created_at=datetime.now(UTC).isoformat())
     _RUNS[case_id] = run
     store.case_created(mandate)
     task = asyncio.create_task(_run_pipeline(run, mandate))

@@ -67,6 +67,7 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
         caseId={cardId}
         targetUrl="mock-host.local/media/xyz789"
         status={cardStatus}
+        interactive={false}
       />
 
       <p className="text-[14px] leading-[1.5] text-mira-muted-text">

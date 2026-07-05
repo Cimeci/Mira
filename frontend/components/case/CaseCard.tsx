@@ -41,7 +41,13 @@ const STAGES = ["collect", "verify", "notify"] as const;
  * collect→verify→notify stage tracker. Meant to sit inside a `group` link so
  * hover lifts the whole card and reveals the "open" affordance.
  */
-export function CaseCard({ caseId, targetUrl, status, createdAt }: CaseCardProps) {
+export function CaseCard({
+  caseId,
+  targetUrl,
+  status,
+  createdAt,
+  interactive = true,
+}: CaseCardProps) {
   const view = caseStatusView(status);
   const tone = TONE[view.tone];
   const time = relativeTime(createdAt ?? null);
@@ -105,9 +111,11 @@ export function CaseCard({ caseId, targetUrl, status, createdAt }: CaseCardProps
             ))}
           </div>
         </div>
-        <span className="whitespace-nowrap font-display text-label uppercase tracking-label text-mira-muted-dim transition-colors group-hover:text-mira-lilac-glow">
-          open →
-        </span>
+        {interactive && (
+          <span className="whitespace-nowrap font-display text-label uppercase tracking-label text-mira-muted-dim transition-colors group-hover:text-mira-lilac-glow">
+            open →
+          </span>
+        )}
       </div>
     </div>
   );
