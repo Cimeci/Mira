@@ -1,57 +1,57 @@
-# API Mira — surface HTTP L2 (`mira/api.py`)
+# Mira API — L2 HTTP surface (`mira/api.py`)
 
-Backend qui pilote le pipeline (`mira.orchestrator`) et streame chaque transition en SSE.
-Sur **mocks** de bout en bout — aucun vrai host, aucune vraie image (G-12).
+Backend that drives the pipeline (`mira.orchestrator`) and streams every transition over SSE.
+Fully on **mocks** end-to-end — no real host, no real image (G-12).
 
-Lancer : `python -m mira.api` (ou `uvicorn mira.api:app --reload`) → `http://127.0.0.1:8000`.
+Run: `python -m mira.api` (or `uvicorn mira.api:app --reload`) → `http://127.0.0.1:8000`.
 
-> Distinct de `mira/web/` (surface scraper/Computer Use, lane Ilan). Les deux
-> cohabitent sans se marcher dessus : `api` = pipeline, `web` = locator CU.
+> Distinct from `mira/web/` (scraper/Computer Use surface, Ilan's lane). The two
+> coexist without stepping on each other: `api` = pipeline, `web` = CU locator.
 
 ## Endpoints
 
-| Méthode | Route | Rôle |
+| Method | Route | Role |
 |--------|-------|------|
-| `GET`  | `/healthz` | sonde de vie → `{"status":"ok"}` |
-| `POST` | `/cases` | crée un case, lance le pipeline en tâche de fond |
-| `GET`  | `/cases/{id}` | **état courant** du case (à lire au montage du front) |
-| `GET`  | `/cases/{id}/events` | flux **SSE**, rejoué du début à chaque (re)connexion |
-| `POST` | `/cases/{id}/confirm` | verdict victime au gate G-7 |
+| `GET`  | `/healthz` | liveness probe → `{"status":"ok"}` |
+| `POST` | `/cases` | creates a case, launches the pipeline in the background |
+| `GET`  | `/cases/{id}` | **current state** of the case (read on front mount) |
+| `GET`  | `/cases/{id}/events` | **SSE** stream, replayed from the start on every (re)connection |
+| `POST` | `/cases/{id}/confirm` | victim verdict at the G-7 gate |
 
 ### `GET /cases/{id}`
 
-État à consulter au montage de la page (ou après un F5) pour se resynchroniser sans
-attendre le SSE :
+State to read on page mount (or after an F5) to resync without
+waiting for the SSE:
 
 ```json
 { "case_id":"…", "finished":false, "current_status":"AWAITING_CONFIRM",
   "statuses":{}, "awaiting_confirm":["https://…/x.jpg"],
-  "pending_notice":{"url":"https://…/x.jpg","text":"Objet : …"},
+  "pending_notice":{"url":"https://…/x.jpg","text":"Subject: …"},
   "events_url":"…", "confirm_url":"…" }
 ```
 
-`pending_notice` est non-null uniquement quand le gate G-7 est ouvert (à afficher +
-proposer Approuver/Refuser). `statuses` se remplit à la fin (`done`).
+`pending_notice` is non-null only when the G-7 gate is open (display it +
+offer Approve/Decline). `statuses` fills in at the end (`done`).
 
 ### `POST /cases`
 
-Corps **optionnel** (sans corps → mandat de démo pré-autorisé sur le mock host) :
+Body is **optional** (no body → pre-authorized demo mandate on the mock host):
 
 ```json
 { "case_id": "case-…", "requester_role": "victim",
   "scope_urls": ["https://mock-host.local/target"], "attestation": true }
 ```
 
-`requester_role` ∈ `victim | legal_rep | authorized_ngo`. Scope invalide / attestation
-manquante → **400** (fail-fast, cf. `mandate.capture_consent`).
+`requester_role` ∈ `victim | legal_rep | authorized_ngo`. Invalid scope / missing
+attestation → **400** (fail-fast, cf. `mandate.capture_consent`).
 
-Deux validations supplémentaires à la frontière (→ **400**) :
-- `case_id` : format strict `^[A-Za-z0-9_-]{1,64}$` (il finit dans un chemin fichier —
-  anti path-traversal) ; omis ou vide → id généré côté serveur.
-- `scope_urls` : hosts limités à l'allow-list démo (G-2/G-12), par défaut
+Two additional boundary validations (→ **400**):
+- `case_id`: strict format `^[A-Za-z0-9_-]{1,64}$` (it ends up in a file path —
+  anti path-traversal); omitted or empty → server-generated id.
+- `scope_urls`: hosts limited to the demo allow-list (G-2/G-12), default
   `mock-host.local`, extensible via `MIRA_ALLOWED_SCOPE_HOSTS="a.local,b.local"`.
 
-Réponse :
+Response:
 
 ```json
 { "case_id":"case-ab12cd34",
@@ -61,20 +61,20 @@ Réponse :
 
 ### `GET /cases/{id}/events` (SSE)
 
-Un objet JSON par `data:`, discriminé par `kind` :
+One JSON object per `data:`, discriminated by `kind`:
 
 ```
-{"kind":"stage",  "event": <StageEvent.to_dict()>}       # transition d'état (rendu timeline)
-{"kind":"notice", "case_id":"…","url":"…","text":"…"}    # notice DSA à valider (gate G-7)
-{"kind":"done",   "case_id":"…","statuses":{url:status}} # terminé → le flux se ferme
-{"kind":"error",  "case_id":"…","message":"…"}           # exception → event terminal
+{"kind":"stage",  "event": <StageEvent.to_dict()>}       # state transition (timeline render)
+{"kind":"notice", "case_id":"…","url":"…","text":"…"}    # DSA notice to validate (G-7 gate)
+{"kind":"done",   "case_id":"…","statuses":{url:status}} # finished → the stream closes
+{"kind":"error",  "case_id":"…","message":"…"}           # exception → terminal event
 ```
 
 `StageEvent.to_dict()` = `{case_id, stage, from_status, to_status, ts_utc, detail, payload}`
-(schéma gelé dans `mira/events.py`). La **notice DSA ne transite jamais dans un `stage`**
-(règle G-6) : elle arrive via `kind:"notice"`, au moment où le gate s'ouvre.
+(schema frozen in `mira/events.py`). The **DSA notice never travels inside a `stage`**
+(rule G-6): it arrives via `kind:"notice"`, at the moment the gate opens.
 
-Séquence nominale (happy path) :
+Nominal sequence (happy path):
 `MANDATED → LOCATED → VERIFIED → AWAITING_CONFIRM → [notice] → CONFIRMED → NOTIFIED → [done]`
 
 ### `POST /cases/{id}/confirm`
@@ -83,22 +83,22 @@ Séquence nominale (happy path) :
 { "approved": true, "url": "https://mock-host.local/target/synthetic_test.jpg" }
 ```
 
-`url` optionnelle (par défaut : première confirmation en attente). `approved:false` ou
-silence > `MIRA_CONFIRM_TIMEOUT_S` → **DECLINED**, rien n'est envoyé (fail-closed, G-7).
+`url` is optional (default: first pending confirmation). `approved:false` or
+silence > `MIRA_CONFIRM_TIMEOUT_S` → **DECLINED**, nothing is sent (fail-closed, G-7).
 
-## Exemple (curl)
+## Example (curl)
 
 ```bash
 CID=$(curl -s -XPOST localhost:8000/cases | python -c 'import sys,json;print(json.load(sys.stdin)["case_id"])')
-curl -N localhost:8000/cases/$CID/events &          # timeline SSE
+curl -N localhost:8000/cases/$CID/events &          # SSE timeline
 curl -s -XPOST localhost:8000/cases/$CID/confirm -H 'content-type: application/json' -d '{"approved":true}'
 ```
 
-## Limites connues (assumées — hackathon)
+## Known limits (assumed — hackathon)
 
-- État **en mémoire, mono-process** : redémarrage = reset ; pas de purge des cases.
-- SSE **multi-consumer avec replay** : chaque (re)connexion rejoue l'historique complet
-  puis suit le live (F5 / 2ᵉ écran OK). L'historique n'est pas borné (mono-process, démo).
-- `MIRA_DEMO_MODE=1` plancher le timeout du gate à 900 s (la notice reste à l'écran).
-- **CORS** ouvert par défaut (dev) pour qu'un front sur une autre origine (Next.js :3000)
-  puisse appeler l'API. Restreindre au besoin : `MIRA_CORS_ORIGINS="https://mon-front"`.
+- State is **in-memory, single-process**: restart = reset; no case purge.
+- SSE is **multi-consumer with replay**: every (re)connection replays the full history
+  then follows the live stream (F5 / 2nd screen OK). History is unbounded (single-process, demo).
+- `MIRA_DEMO_MODE=1` floors the gate timeout to 900s (the notice stays on screen).
+- **CORS** open by default (dev) so a front on another origin (Next.js :3000)
+  can call the API. Restrict as needed: `MIRA_CORS_ORIGINS="https://my-front"`.

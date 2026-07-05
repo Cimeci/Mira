@@ -1,371 +1,371 @@
-# 🧠 ARCHITECTURE — Mira : computer use, agents, infra, produit & cadre légal
+# 🧠 ARCHITECTURE — Mira: computer use, agents, infra, product & legal frame
 
-> Ce fichier fige **ce que l'équipe a décidé** sur le moteur de Mira : comment on se sert de _computer use_, comment les agents s'enchaînent pour aller sur le site d'une URL et **remplir les formulaires / envoyer les mails de takedown**, dans quelle **infra** (agents dans des Docker isolés), avec quelles **surfaces produit** (frontend, backend, branding), et où passe la ligne légale (dépôt d'URL + accord de la victime).
+> This file freezes **what the team decided** about Mira's engine: how we use _computer use_, how the agents chain together to reach a URL's site and **fill the forms / send the takedown emails**, in which **infra** (agents in isolated Dockers), with which **product surfaces** (frontend, backend, branding), and where the legal line runs (URL submission + victim consent).
 >
-> Sources : `meeting_note#1_Mira_roadmap.md` (réunion #1) + le spec EU (`project-mira-eu-spec.md`). En cas de conflit, **ce fichier tranche pour le hackathon** ; le spec reste la référence légale détaillée.
+> Sources: `meeting_note#1_Mira_roadmap.md` (meeting #1) + the EU spec (`project-mira-eu-spec.md`). In case of conflict, **this file decides for the hackathon**; the spec remains the detailed legal reference.
 >
-> ⚠️ **Pas un avis juridique.** Toute référence légale (RGPD, DSA, loi SREN…) est indicative et doit être revérifiée sur Légifrance / EUR-Lex avant tout déploiement réel. Aucune donnée de vraie victime ne transite par la démo.
+> ⚠️ **Not legal advice.** Any legal reference (GDPR, DSA, SREN law…) is indicative and must be re-checked on Légifrance / EUR-Lex before any real deployment. No real victim data passes through the demo.
 
 ---
 
-## 0. En une phrase
+## 0. In one sentence
 
-Mira est un **agent de takedown consent-first pour les images non consenties (NCII / deepfakes sexuels)** : la victime dépose une URL + un mandat signé, et une chaîne d'agents va **collecter → vérifier → notifier** à sa place, sans qu'elle ait à scroller le contenu ni rédiger une seule ligne juridique.
+Mira is a **consent-first takedown agent for non-consensual imagery (NCII / sexual deepfakes)**: the victim submits a URL + a signed mandate, and a chain of agents goes to **collect → verify → notify** on their behalf, without them having to scroll the content or write a single line of legalese.
 
-Le principe central de la réunion : **l'IA n'a pas de sentiments, elle fait le sale boulot à la place de la victime.** Être victime _et_ devoir gérer soi-même les démarches = double traumatisme. On supprime ça.
+The core principle from the meeting: **AI has no feelings, it does the dirty work in the victim's place.** Being a victim _and_ having to handle the process yourself = double trauma. We remove that.
 
 ---
 
-## 1. Deux périmètres, ne pas les confondre
+## 1. Two scopes, don't conflate them
 
-| | **V1 — Chemin de démo (réactif)** | **V2 — Goal max (proactif, incertain)** |
+| | **V1 — Demo path (reactive)** | **V2 — Stretch goal (proactive, uncertain)** |
 |---|---|---|
-| **Déclencheur** | La victime **dépose une URL** (reçue d'un ami, trouvée par hasard) | La victime **scanne son visage**, on part crawler pour elle |
-| **Scope** | Les surfaces que la victime autorise, point | Une **allowlist** de sites connus pour les deepfakes |
-| **Ce qu'on construit ce week-end** | ✅ **Oui** — c'est la démo notée | 🟡 Roadmap / vision long terme (les ~15% du jury) |
-| **Coût computer use** | Borné, démontrable en live | Lent + cher — **la réunion a acté de NE PAS scanner l'open web en V1** |
-| **Poids légal** | Léger : la victime pointe elle-même le contenu | Lourd : traitement proactif de données sensibles → consentement explicite + DPIA **obligatoires** |
+| **Trigger** | The victim **submits a URL** (received from a friend, found by chance) | The victim **scans their face**, we go crawl for them |
+| **Scope** | The surfaces the victim authorizes, period | An **allowlist** of sites known for deepfakes |
+| **What we build this weekend** | ✅ **Yes** — this is the judged demo | 🟡 Roadmap / long-term vision (the jury's ~15%) |
+| **Computer-use cost** | Bounded, demoable live | Slow + expensive — **the meeting decided NOT to scan the open web in V1** |
+| **Legal weight** | Light: the victim points at the content themselves | Heavy: proactive processing of sensitive data → explicit consent + DPIA **mandatory** |
 
-> **Décision d'équipe.** On **ship V1**, on **pitche V2**. V2 n'est défendable que sur une base précise (§8) : c'est **le propre visage de la victime**, avec **son consentement explicite**, sur un **périmètre restreint** — jamais un crawl de l'open web sur des inconnus. Sans ça, V2 est illégal, pas juste ambitieux.
+> **Team decision.** We **ship V1**, we **pitch V2**. V2 is only defensible on a precise basis (§8): it's **the victim's own face**, with **their explicit consent**, on a **restricted scope** — never a crawl of the open web on strangers. Without that, V2 is illegal, not just ambitious.
 
 ---
 
-## 2. Computer use — la recherche & le choix
+## 2. Computer use — the research & the choice
 
-### 2.1 Le problème que ça résout
+### 2.1 The problem it solves
 
-Chaque plateforme a son propre mécanisme de signalement : formulaire web maison, portail DSA, `abuse@`, captcha, scroll infini, connexion requise. Pas d'API unifiée. **Computer use** = un agent qui _voit l'écran et agit comme un humain_ (bouge le curseur, clique, tape, scrolle), donc il absorbe cette hétérogénéité sans qu'on code un connecteur par site.
+Every platform has its own reporting mechanism: homegrown web form, DSA portal, `abuse@`, captcha, infinite scroll, required login. No unified API. **Computer use** = an agent that _sees the screen and acts like a human_ (moves the cursor, clicks, types, scrolls), so it absorbs this heterogeneity without us coding one connector per site.
 
-Contrepartie : **c'est lent par nature** — boucle `screenshot → analyse → action suivante`, quelques secondes par étape. On l'assume et on l'isole.
+Downside: **it's slow by nature** — a `screenshot → analyze → next action` loop, a few seconds per step. We accept it and isolate it.
 
-### 2.2 On est sur le track Google → **Gemini 2.5 Computer Use**
+### 2.2 We're on the Google track → **Gemini 2.5 Computer Use**
 
-**Décision figée : le moteur computer use de Mira est Gemini 2.5 Computer Use** (`gemini-2.5-computer-use`, dispo via **Google AI Studio** et **Vertex AI**). C'est le choix imposé par le track sponsor, et c'est un **atout de pitch** : Google annonce qu'il bat Claude Sonnet et les agents OpenAI sur les benchmarks de contrôle d'interface web/mobile, **avec moins de latence** — exactement notre goulot (computer use est lent par nature).
+**Frozen decision: Mira's computer-use engine is Gemini 2.5 Computer Use** (`gemini-2.5-computer-use`, available via **Google AI Studio** and **Vertex AI**). It's the choice imposed by the sponsor track, and it's a **pitch asset**: Google claims it beats Claude Sonnet and OpenAI's agents on web/mobile UI-control benchmarks, **with lower latency** — exactly our bottleneck (computer use is slow by nature).
 
-Comment ça marche — un **outil `computer_use`** piloté en boucle :
+How it works — a **`computer_use` tool** driven in a loop:
 
 ```
-  requête + screenshot + historique d'actions
+  request + screenshot + action history
                     │
                     ▼
         Gemini 2.5 Computer Use
-                    │  → action recommandée (clic / frappe / scroll)
-                    │  → peut DEMANDER CONFIRMATION sur une action à risque
+                    │  → recommended action (click / type / scroll)
+                    │  → may ASK FOR CONFIRMATION on a risky action
                     ▼
-        on exécute l'action (via Playwright / Browserbase)
+        we execute the action (via Playwright / Browserbase)
                     │
                     ▼
-        nouveau screenshot renvoyé au modèle → on reboucle
+        new screenshot sent back to the model → we loop again
                     │
-            jusqu'à tâche finie / halt (erreur ou décision de sûreté)
+            until task done / halt (error or safety decision)
 ```
 
-Il sait nativement **remplir et soumettre des formulaires**, manipuler dropdowns/filtres, et opérer **derrière un login** — c'est précisément le geste de takedown qu'on automatise.
+It natively knows how to **fill and submit forms**, manipulate dropdowns/filters, and operate **behind a login** — which is precisely the takedown gesture we automate.
 
-### 2.3 Le reste de la stack autour de Gemini CU
+### 2.3 The rest of the stack around Gemini CU
 
-| Brique | Rôle | Pourquoi |
+| Piece | Role | Why |
 |---|---|---|
-| **Gemini 2.5 Computer Use** | **Cerveau** de l'agent : décide l'action UI à partir du screenshot | Track Google, meilleurs benchmarks contrôle UI, latence basse, form-filling natif |
-| **Playwright** (Chromium) | **Bras** : exécute réellement clics/frappes/scroll, chemin de démo figé | Substrat d'exécution recommandé par Google pour Gemini CU ; déterministe et stable au vidéoprojecteur |
-| **Browserbase** (sandbox) | Environnement navigateur isolé prêt à l'emploi | Démarrage rapide, isolation, alternative si on ne gère pas l'infra nous-mêmes |
-| **Gemini / Gemma** (2.5) | Rédaction de la notice DSA, instructions au locator, raisonnement | Même track Google ; Gemma pour les tâches légères/locales |
+| **Gemini 2.5 Computer Use** | The agent's **brain**: decides the UI action from the screenshot | Google track, best UI-control benchmarks, low latency, native form-filling |
+| **Playwright** (Chromium) | The **arm**: actually executes clicks/types/scrolls, frozen demo path | Execution substrate recommended by Google for Gemini CU; deterministic and stable on the projector |
+| **Browserbase** (sandbox) | Ready-made isolated browser environment | Fast start, isolation, alternative if we don't run the infra ourselves |
+| **Gemini / Gemma** (2.5) | Drafting the DSA notice, locator instructions, reasoning | Same Google track; Gemma for light/local tasks |
 
-### 2.4 Ce qu'on décide
+### 2.4 What we decide
 
-- **Gemini 2.5 Computer Use = cerveau ; Playwright = bras.** Le modèle décide l'action, Playwright l'exécute. Pour le **chemin de démo critique**, on peut figer la trajectoire en Playwright pur (fiabilité live) et laisser Gemini CU gérer l'adaptatif (captcha, UI inconnue) sur les cas « wow ».
-- **Deux fronts en parallèle** (acté en réunion) : **scraping browser** + **simulateur mobile** — certains sites/formulaires n'existent qu'en app.
-- **Tout tourne dans des containers Docker** (ou sandbox Browserbase), **jamais sur le device de la victime**. Isolation, privilèges minimaux, accès réseau restreint. Un agent qui pilote un navigateur est une surface à risque — on le sandboxe.
-- **Human-in-the-loop au bord** : Gemini CU sait déjà **demander confirmation sur une action à risque** — on branche ça sur notre gate de victime (§6). Rédaction et résolution autonomes, mais **la victime valide avant tout envoi externe**.
+- **Gemini 2.5 Computer Use = brain; Playwright = arm.** The model decides the action, Playwright executes it. For the **critical demo path**, we can freeze the trajectory in pure Playwright (live reliability) and let Gemini CU handle the adaptive part (captcha, unknown UI) on the "wow" cases.
+- **Two fronts in parallel** (agreed in the meeting): **scraping browser** + **mobile simulator** — some sites/forms only exist as an app.
+- **Everything runs inside Docker containers** (or a Browserbase sandbox), **never on the victim's device**. Isolation, minimal privileges, restricted network access. An agent driving a browser is a risk surface — we sandbox it.
+- **Human-in-the-loop at the edge**: Gemini CU already knows how to **ask for confirmation on a risky action** — we wire that into our victim gate (§6). Autonomous drafting and resolution, but **the victim validates before any external send**.
 
-### 2.5 Fiabilité — ce qu'on met en place
+### 2.5 Reliability — what we put in place
 
-Boucle d'action robuste (galère connue des agents navigateur) :
-- **Context caching** Gemini + images bien dimensionnées + pruning des vieux screenshots (le budget tokens explose sur les longues sessions).
-- **Timeouts + backoff** sur toute I/O, **watchdog** anti-stall (une coroutine qui tue les boucles bloquées).
-- **Trajectory recording** : on log chaque action (screenshot + décision) → rejouable, débuggable, et ça alimente la preuve d'audit.
-- Anti-bot (captcha, Cloudflare) = risque n°1 connu → on s'appuie sur la capacité de Gemini CU à agir comme un humain, et on **cache la réponse pour la démo** (pas de dépendance live fragile au vidéoprojecteur).
+Robust action loop (a known headache for browser agents):
+- **Context caching** on Gemini + well-sized images + pruning of old screenshots (the token budget explodes on long sessions).
+- **Timeouts + backoff** on all I/O, **watchdog** anti-stall (a coroutine that kills stuck loops).
+- **Trajectory recording**: we log every action (screenshot + decision) → replayable, debuggable, and it feeds the audit trail.
+- Anti-bot (captcha, Cloudflare) = known risk #1 → we rely on Gemini CU's ability to act like a human, and we **cache the response for the demo** (no fragile live dependency on the projector).
 
 ---
 
-## 3. Architecture workflow — les agents
+## 3. Workflow architecture — the agents
 
-Pipeline **Mandat → Localise → Vérifie → Notifie**. Le consentement débloque l'autonomie ; sans mandat actif, **aucun agent ne tourne** (garde-fou dur au niveau de l'orchestrateur, pas laissé à chaque agent).
+Pipeline **Mandate → Locate → Verify → Notify**. Consent unlocks autonomy; without an active mandate, **no agent runs** (hard guardrail at the orchestrator level, not left to each agent).
 
 ```
 +------------------------------------------------------------------+
-|                    ORCHESTRATEUR (async runtime)                 |
-|        Consent gate : refuse de lancer si Mandate.active == False |
+|                    ORCHESTRATOR (async runtime)                  |
+|        Consent gate: refuses to start if Mandate.active == False |
 +--------+------------------+------------------+--------------------+
          |                  |                  |
          v                  v                  v
 +----------------+  +----------------+  +--------------------------+
-| AGENT COLLECTE |  | AGENT VERIF    |  | AGENT LÉGAL / NOTIFIER   |
+| COLLECT AGENT  |  | VERIFY AGENT   |  | LEGAL / NOTIFIER AGENT   |
 | (computer use) |  | (embeddings)   |  |                          |
-|                |  |                |  | Résout l'hébergeur (RDAP)|
-| Va sur les URLs|  | Compare le     |  | Rédige la notice DSA a.16|
-| in-scope,      |  | visage victime |  | Déclar. bonne foi + IA   |
-| simule humain, |  | aux images     |  | GATE confirmation victime|
-| bypass captcha,|  | collectées     |  | Remplit le formulaire /  |
-| scroll infini  |  | Pré-check      |  | envoie le mail (takedown)|
-| Read-only      |  | mineur (STOP)  |  |                          |
+|                |  |                |  | Resolves the host (RDAP) |
+| Goes to the in-|  | Compares the   |  | Drafts the DSA a.16 notice|
+| scope URLs,    |  | victim's face  |  | Good-faith + AI statement|
+| simulates human|  | to collected   |  | Victim confirmation GATE |
+| bypasses captcha| | images         |  | Fills the form /         |
+| infinite scroll|  | Minor pre-check|  | sends the mail (takedown)|
+| Read-only      |  | (STOP)         |  |                          |
 +-------+--------+  +-------+--------+  +------------+-------------+
         |                   |                        |
         +-------------------+------------------------+
                             v
               +-------------------------------+
-              |   CASE STORE chiffré          |
+              |   ENCRYPTED CASE STORE        |
               |   URLs + hash + embeddings    |
-              |   (jamais les images brutes)  |
-              |   access-logged, rétention    |
+              |   (never the raw images)      |
+              |   access-logged, retention    |
               +-------------------------------+
 ```
 
-### 3.1 Les trois couches (réunion) mappées sur les étapes (spec)
+### 3.1 The three layers (meeting) mapped onto the stages (spec)
 
-| # | Agent (réunion) | Étape (spec) | Rôle concret |
+| # | Agent (meeting) | Stage (spec) | Concrete role |
 |---|---|---|---|
-| **0** | — (gate) | **Mandate** | Enregistre identité + consentement + scope. Débloque le reste. Révocable → purge. |
-| **1** | **Agent de collecte** (computer use) | **Locator** | Visite **uniquement les URLs du scope**, simule les actions humaines (scroll infini, bypass captcha), **read-only** (pas de login, pas de submit, ne suit pas les liens hors scope). Ne juge pas le contenu. Sort des URLs média candidates. |
-| **2** | **Agent de vérification** | **Analyzer** | **Pré-check mineur d'abord** (→ STOP + escalade, §7). Puis compare les **embeddings faciaux** de la victime aux images collectées (gère les faux positifs) + score deepfake. Capture une **preuve minimale** (hash perceptuel + URL + timestamp), pas les octets bruts. |
-| **3** | **Agent légal** | **Notifier** | Identifie plateforme + pays d'hébergement + pays de la victime → **remplit la plainte en ligne / envoie DMCA·DSA / contacte l'hébergeur**. En France, **signature de la victime requise** sur le mandat. Gate de confirmation avant tout envoi. |
+| **0** | — (gate) | **Mandate** | Records identity + consent + scope. Unlocks the rest. Revocable → purge. |
+| **1** | **Collect agent** (computer use) | **Locator** | Visits **only the scope URLs**, simulates human actions (infinite scroll, captcha bypass), **read-only** (no login, no submit, doesn't follow out-of-scope links). Doesn't judge the content. Outputs candidate media URLs. |
+| **2** | **Verify agent** | **Analyzer** | **Minor pre-check first** (→ STOP + escalate, §7). Then compares the victim's **facial embeddings** to the collected images (handles false positives) + deepfake score. Captures **minimal evidence** (perceptual hash + URL + timestamp), not the raw bytes. |
+| **3** | **Legal agent** | **Notifier** | Identifies platform + hosting country + victim's country → **fills the online complaint / sends DMCA·DSA / contacts the host**. In France, the **victim's signature is required** on the mandate. Confirmation gate before any send. |
 
-### 3.2 Machine à états
+### 3.2 State machine
 
 ```
- MANDATED --> LOCATED --> VERIFIED --> CONFIRMED --> NOTIFIED --> [RE-CHECK J+7]
- consent      URL in-     hash +       victime      notice DSA    vérifie le
- + scope      scope       embeddings   approuve     envoyée       retrait effectif
-    |            match                                   
-    | revoked                 | mineur suspecté          | score < seuil
+ MANDATED --> LOCATED --> VERIFIED --> CONFIRMED --> NOTIFIED --> [RE-CHECK D+7]
+ consent      URL in-     hash +       victim       DSA notice    checks the
+ + scope      scope       embeddings   approves      sent          actual removal
+    |            match
+    | revoked                 | suspected minor          | score < threshold
     v                         v                          v
  REVOKED                  ESCALATED                   REJECTED
- purge data               autorités + halt            jeté (0 stockage)
+ purge data               authorities + halt          discarded (0 storage)
 ```
 
-- **Communication inter-agents** : `asyncio.Queue` entre chaque étape (Locator → Analyzer → Notifier). Chaque agent est un consommateur/producteur async indépendant → testable isolément avec des APIs mockées.
-- **Deux cas produit couverts** (réunion) : **ciblé** (streamers/célébrités, mêmes images spammées sur N sites) et **non-ciblé** (ressemblance issue d'un entraînement de modèle). Même pipeline, l'Analyzer gère la nuance.
-- **Re-check automatique J+7** après le takedown : un agent repasse sur l'URL pour vérifier que le contenu a bien disparu. C'est ça qui rend le produit crédible (« Mira ne se contente pas d'envoyer, il vérifie »).
+- **Inter-agent communication**: `asyncio.Queue` between each stage (Locator → Analyzer → Notifier). Each agent is an independent async consumer/producer → testable in isolation with mocked APIs.
+- **Two product cases covered** (meeting): **targeted** (streamers/celebrities, same images spammed across N sites) and **untargeted** (resemblance arising from a model's training). Same pipeline, the Analyzer handles the nuance.
+- **Automatic re-check at D+7** after the takedown: an agent revisits the URL to verify the content is actually gone. That's what makes the product credible ("Mira doesn't just send, it verifies").
 
 ---
 
-## 4. Infra & runtime — le cerveau dans un Docker contrôlé
+## 4. Infra & runtime — the brain in a controlled Docker
 
-> Le computer use pilote un vrai navigateur qui visite des sites potentiellement hostiles : c'est **lent** et c'est une **surface à risque**. On l'isole. Le **cerveau** (Gemini CU) raisonne ; le **corps** (Chromium piloté par Playwright) agit dans un container jetable, jamais sur le device de la victime ni sur l'host.
+> Computer use drives a real browser that visits potentially hostile sites: it's **slow** and it's a **risk surface**. We isolate it. The **brain** (Gemini CU) reasons; the **body** (Chromium driven by Playwright) acts in a disposable container, never on the victim's device or the host.
 
-### 4.1 Topologie de déploiement (le piège Vercel à connaître)
+### 4.1 Deployment topology (the Vercel trap to know about)
 
-**Vercel est serverless → timeouts courts, pas de navigateur long-running. Le computer use n'y tourne PAS.** Vercel héberge le **frontend + l'API légère** ; l'**orchestrateur + les workers** tournent en **containers sur Cloud Run** (même cloud que Vertex AI/Gemini → clé, réseau, secrets alignés, zéro serveur à administrer), avec le **navigateur isolé chez Browserbase**. Le backend fait le **pont** entre les deux. Choix assumé : **du managé, aucune VM montée à la main** — plus simple, plus propre pour 15h.
+**Vercel is serverless → short timeouts, no long-running browser. Computer use does NOT run there.** Vercel hosts the **frontend + the light API**; the **orchestrator + workers** run in **containers on Cloud Run** (same cloud as Vertex AI/Gemini → key, network, secrets aligned, zero server to administer), with the **isolated browser at Browserbase**. The backend is the **bridge** between the two. Assumed choice: **managed, no VM stood up by hand** — simpler, cleaner for 15h.
 
 ```
-        VICTIME (navigateur)
+        VICTIM (browser)
               │  HTTPS
               ▼
    ┌────────────────────────────┐
-   │  FRONTEND + API  (Vercel)  │   ← serverless, léger — PAS de computer use ici
+   │  FRONTEND + API  (Vercel)  │   ← serverless, light — NO computer use here
    │  Next.js App Router        │
-   │  · dépôt URL + mandat      │
-   │  · stream état des agents  │
-   │  · preview notice + gate   │
+   │  · URL submission + mandate│
+   │  · stream agent state      │
+   │  · notice preview + gate   │
    └─────────────┬──────────────┘
                  │  job / webhook / SSE
                  ▼
    ┌────────────────────────────┐
-   │  ORCHESTRATEUR + WORKERS   │   ← Cloud Run (containers, hors Vercel)
+   │  ORCHESTRATOR + WORKERS    │   ← Cloud Run (containers, off Vercel)
    │  (async runtime, consent gate)
    │   ┌──────────┐ ┌──────────┐ │
-   │   │ browser  │ │ mobile   │ │   ← sandbox éphémère par cas (Browserbase en démo · propre container en prod)
-   │   │ +Chromium│ │ simu     │ │      Gemini CU = cerveau (API Vertex AI)
-   │   │ Playwright│ │          │ │      Playwright = bras (dans le container)
+   │   │ browser  │ │ mobile   │ │   ← ephemeral sandbox per case (Browserbase in demo · own container in prod)
+   │   │ +Chromium│ │ simulator│ │      Gemini CU = brain (Vertex AI API)
+   │   │ Playwright│ │          │ │      Playwright = arm (inside the container)
    │   └──────────┘ └──────────┘ │
    └─────────────┬──────────────┘
                  ▼
-     CASE STORE chiffré (Postgres/Supabase)
-     URLs + hash + embeddings — jamais les images
+     ENCRYPTED CASE STORE (Postgres/Supabase)
+     URLs + hash + embeddings — never the images
 ```
 
-**Où ça tourne + qui possède quoi** (le split app / plateforme, pour éviter le seam-of-death sur le chemin critique) :
+**Where it runs + who owns what** (the app / platform split, to avoid the seam-of-death on the critical path):
 
-| Brique | Où | Owner |
+| Piece | Where | Owner |
 |---|---|---|
-| Frontend + API L2 (relais) | **Vercel** | Tech Lead (L2) |
-| Service Cloud Run (deploy, secrets, réseau, egress) | **Cloud Run** | **L4 Infra** |
-| Image du container + contrat de job + code CU dedans | **Cloud Run** | **Tech Lead** |
-| Sandbox navigateur isolée | **Browserbase** (démo) → **propre container** (prod) | L4 provisionne, Tech Lead consomme |
+| Frontend + L2 API (relay) | **Vercel** | Tech Lead (L2) |
+| Cloud Run service (deploy, secrets, network, egress) | **Cloud Run** | **L4 Infra** |
+| Container image + job contract + CU code inside it | **Cloud Run** | **Tech Lead** |
+| Isolated browser sandbox | **Browserbase** (demo) → **own container** (prod) | L4 provisions, Tech Lead consumes |
 
-> Règle : le Tech Lead ne **possède** pas la plateforme, mais doit pouvoir **déployer dessus sans attendre** (le worker CU est le chemin critique). `gcloud run deploy` en dépannage = OK, mais on l'annonce à L4 (on ne touche pas au lane d'un autre en silence).
+> Rule: the Tech Lead doesn't **own** the platform, but must be able to **deploy on it without waiting** (the CU worker is the critical path). `gcloud run deploy` for troubleshooting = OK, but we announce it to L4 (we don't touch another's lane silently).
 
-**🎯 Décision hackathon — Browserbase en démo, propre container en prod.** Règle maison : *démontrable maintenant > propre plus tard*.
+**🎯 Hackathon decision — Browserbase in demo, own container in prod.** House rule: *demoable now > clean later*.
 
-- **Ce week-end : navigateur chez Browserbase.** La démo tourne sur du **mock** (contenu synthétique, host mock, boîte mail de démo — cf §10) → l'argument « le contenu sensible passe chez un tiers » **ne s'applique pas**, et Browserbase supprime le time-sink n°1 : **Chromium-dans-Docker** (deps, flags de sandbox, OOM). Le **full vibe code accélère le *code*** (boucle agent, glue API, front), **pas** le debug d'infra — donc on managé là où ça fait mal.
-- **Le propre container reste l'argument prod/roadmap** : *« en démo, Browserbase sur du synthétique ; en prod, le navigateur tourne dans **notre** container isolé pour que le contenu sensible ne touche jamais un tiers. »* Renforce le pitch (data sovereignty / RGPD) à **coût démo zéro** — l'option A n'est pas jetée, elle vaut des points en vision (~15 %).
-- **Garde-fou** : on ne yak-shave **pas** le deploy Cloud Run **avant** que le vertical slice marche. Pour la démo live, l'orchestrateur peut tourner **en local** (le jury regarde le résultat, pas l'hébergeur). Cloud Run = la story propre du pitch + le « ça tourne sans toi » de la submission → à brancher **après** que l'end-to-end fonctionne.
+- **This weekend: browser at Browserbase.** The demo runs on **mock** (synthetic content, mock host, demo mailbox — cf §10) → the "sensitive content passes through a third party" argument **doesn't apply**, and Browserbase removes time-sink #1: **Chromium-in-Docker** (deps, sandbox flags, OOM). **Full vibe code speeds up the *code*** (agent loop, API glue, front), **not** infra debugging — so we go managed where it hurts.
+- **The own container remains the prod/roadmap argument**: *"in demo, Browserbase on synthetic; in prod, the browser runs in **our** isolated container so sensitive content never touches a third party."* Reinforces the pitch (data sovereignty / GDPR) at **zero demo cost** — option A isn't dropped, it earns vision points (~15%).
+- **Guardrail**: we do **not** yak-shave the Cloud Run deploy **before** the vertical slice works. For the live demo, the orchestrator can run **locally** (the jury watches the result, not the host). Cloud Run = the pitch's clean story + the submission's "it runs without you" → to wire up **after** the end-to-end works.
 
-### 4.2 Ce que le container garantit
+### 4.2 What the container guarantees
 
-| Contrainte | Pourquoi |
+| Constraint | Why |
 |---|---|
-| **1 sandbox éphémère par cas** | Isolation totale entre victimes ; teardown + purge à la fin du cas ou à la révocation du mandat |
-| **Privilèges minimaux, FS éphémère** | Un site hostile qui exploite le navigateur ne touche ni l'host ni les autres cas |
-| **Egress réseau restreint (allowlist)** | Le worker ne parle qu'aux URLs du scope (+ APIs Gemini/store) — pas de crawl sauvage (renforce G-2) |
-| **Cerveau ≠ corps** | Gemini CU raisonne via l'API Google ; seul Chromium+Playwright vit dans le container → on peut tuer/rejouer un container sans perdre la logique |
-| **Deux runtimes en parallèle** (réunion) | Un container **scraping browser** + un container **simulateur mobile** — certains formulaires n'existent qu'en app |
+| **1 ephemeral sandbox per case** | Total isolation between victims; teardown + purge at the end of the case or on mandate revocation |
+| **Minimal privileges, ephemeral FS** | A hostile site that exploits the browser touches neither the host nor the other cases |
+| **Restricted network egress (allowlist)** | The worker only talks to the scope URLs (+ Gemini/store APIs) — no wild crawl (reinforces G-2) |
+| **Brain ≠ body** | Gemini CU reasons via the Google API; only Chromium+Playwright lives in the container → we can kill/replay a container without losing the logic |
+| **Two runtimes in parallel** (meeting) | A **scraping browser** container + a **mobile simulator** container — some forms only exist in an app |
 
-### 4.3 Robustesse d'exécution
+### 4.3 Execution robustness
 
-- **Orchestrateur** : lève le consent gate, spawn le container avec le `scope_urls` injecté, relaie l'état au backend, tue + purge à la fin.
-- **Watchdog + timeouts + backoff** sur chaque job (cf §2.5) → un container bloqué est tué, pas laissé pendre.
-- **Trajectory recording** persistée hors du container éphémère → rejouable, débuggable, et alimente la preuve d'audit.
-- **Lane owner** : infra Cloud Run + orchestration = **L4** (cf §9) ; le Tech Lead possède l'image du container + le contrat de job.
-
----
-
-## 5. Les surfaces produit — Frontend, Backend, Branding
-
-> Le moteur agentique est le « wow », mais le jury note la **démo live**. Il faut une UI **intentionnelle** (règle maison : pas de template Tailwind par défaut) et un backend qui **relie le workflow au frontend** proprement.
-
-### 5.1 Branding (on a déjà l'icône)
-
-- **`icon.png`** (racine) = **graine visuelle** de Mira → à décliner en **favicon + app icon + logo header**.
-- **Ton** : protecteur, digne, sérieux — **jamais victimisant ni clinique/anxiogène**. « Mira » évoque *regarder / miroir* : on prend en charge le regard à la place de la victime.
-- **Avant de coder l'UI** (règle maison design-quality) : figer **palette + typographie** à partir de l'icône. Direction assumée (éditorial sobre + une couleur d'accent), pas « clean minimal » par défaut.
-- **Deliverable démo** (réunion) : 1 image de présentation, **3 éléments max** + l'icône déclinée.
-
-### 5.2 Frontend — L3 (la surface de démo)
-
-Les écrans du chemin de démo, dans l'ordre :
-
-1. **Landing** — la promesse : *« tu n'as pas à gérer ça toi-même »*.
-2. **Dépôt** — coller l'URL + **KYC** (scan visage → **embeddings générés CÔTÉ CLIENT**, l'image ne part jamais) + **signature du mandat**.
-3. **Live agent view — LE wow** : on **regarde les 3 agents bosser en temps réel** (Collecte → Vérif → Légal), chaque état qui s'allume, screenshots **floutés** du scraping, match facial (**visage only**). ⚠️ La lenteur du computer use devient un **spectacle** au lieu d'une attente morte.
-4. **Preview + gate** — la notice DSA rédigée s'affiche, la victime **relit et approuve** (elle garde le contrôle, ne rédige rien).
-5. **Suivi** — statut *envoyé* + **re-check J+7**.
-
-Contraintes maison : animations **compositor-friendly** (`transform`/`opacity`, jamais `width`/`top`) — une transition qui rame se voit au vidéoprojecteur. États `hover`/`focus`/`active` soignés, hiérarchie par le contraste d'échelle.
-
-### 5.3 Backend — L2 (le pont workflow ↔ frontend)
-
-API routes Next.js (sur Vercel) = la colle. Responsabilités :
-
-- **Créer** un cas + mandat en validant les entrées aux frontières (handler = frontière, on ne fait pas confiance à l'input).
-- **Déclencher** l'orchestrateur (job sur le worker Docker de §4).
-- **Relayer** l'état des agents au frontend en temps réel (**SSE / polling**) — c'est ce qui alimente la *live agent view*.
-- **Servir** le brouillon de notice, **encaisser** l'approbation (la gate de §6).
-- **Persister** URLs + hash + embeddings (Postgres/Supabase) — **jamais les images**.
-- **Ce qu'il NE fait PAS** : le computer use lui-même (timeouts serverless) → il **dispatche et relaie**, il ne pilote pas le navigateur.
-
-**Contrat de données** = les objets de §3/§8 (`Mandate`, `ForensicRecord`, statut). **Une seule source de vérité** pour la machine à états (`MANDATED → … → NOTIFIED`) partagée front / back / agents — c'est ce qui évite que les 5 sessions divergent.
+- **Orchestrator**: raises the consent gate, spawns the container with the injected `scope_urls`, relays state to the backend, kills + purges at the end.
+- **Watchdog + timeouts + backoff** on each job (cf §2.5) → a stuck container is killed, not left hanging.
+- **Trajectory recording** persisted outside the ephemeral container → replayable, debuggable, and feeds the audit trail.
+- **Lane owner**: Cloud Run infra + orchestration = **L4** (cf §9); the Tech Lead owns the container image + the job contract.
 
 ---
 
-## 6. Le flux principal V1 (ce que le jury voit)
+## 5. Product surfaces — Frontend, Backend, Branding
+
+> The agentic engine is the "wow", but the jury scores the **live demo**. We need an **intentional** UI (house rule: no default Tailwind template) and a backend that **connects the workflow to the frontend** cleanly.
+
+### 5.1 Branding (we already have the icon)
+
+- **`icon.png`** (root) = Mira's **visual seed** → to derive into **favicon + app icon + header logo**.
+- **Tone**: protective, dignified, serious — **never victimizing nor clinical/anxiety-inducing**. "Mira" evokes *looking / mirror*: we take on the gaze in the victim's place.
+- **Before coding the UI** (design-quality house rule): freeze **palette + typography** from the icon. Assumed direction (understated editorial + one accent color), not "clean minimal" by default.
+- **Demo deliverable** (meeting): 1 presentation image, **3 elements max** + the derived icon.
+
+### 5.2 Frontend — L3 (the demo surface)
+
+The demo-path screens, in order:
+
+1. **Landing** — the promise: *"you don't have to handle this yourself"*.
+2. **Submission** — paste the URL + **KYC** (face scan → embeddings generated **CLIENT-SIDE**, the image never leaves) + **mandate signature**.
+3. **Live agent view — THE wow**: we **watch the 3 agents work in real time** (Collect → Verify → Legal), each state lighting up, **blurred** scraping screenshots, facial match (**face only**). ⚠️ Computer use's slowness becomes a **spectacle** instead of dead waiting.
+4. **Preview + gate** — the drafted DSA notice appears, the victim **reviews and approves** it (they stay in control, write nothing).
+5. **Follow-up** — *sent* status + **D+7 re-check**.
+
+House constraints: **compositor-friendly** animations (`transform`/`opacity`, never `width`/`top`) — a laggy transition shows on the projector. Polished `hover`/`focus`/`active` states, hierarchy through scale contrast.
+
+### 5.3 Backend — L2 (the workflow ↔ frontend bridge)
+
+Next.js API routes (on Vercel) = the glue. Responsibilities:
+
+- **Create** a case + mandate while validating inputs at the boundaries (the handler = boundary, we don't trust the input).
+- **Trigger** the orchestrator (a job on the §4 Docker worker).
+- **Relay** agent state to the frontend in real time (**SSE / polling**) — this is what feeds the *live agent view*.
+- **Serve** the notice draft, **collect** the approval (the §6 gate).
+- **Persist** URLs + hash + embeddings (Postgres/Supabase) — **never the images**.
+- **What it does NOT do**: computer use itself (serverless timeouts) → it **dispatches and relays**, it doesn't drive the browser.
+
+**Data contract** = the objects in §3/§8 (`Mandate`, `ForensicRecord`, status). **A single source of truth** for the state machine (`MANDATED → … → NOTIFIED`) shared across front / back / agents — that's what keeps the 5 sessions from diverging.
+
+---
+
+## 6. The main V1 flow (what the jury sees)
 
 ```
-1. La victime arrive sur Mira, colle une URL + signe le mandat (KYC : photo de face)
-        │  (embeddings générés CÔTÉ CLIENT — l'image ne quitte pas son device)
+1. The victim lands on Mira, pastes a URL + signs the mandate (KYC: front-facing photo)
+        │  (embeddings generated CLIENT-SIDE — the image never leaves their device)
         ▼
-2. Agent COLLECTE (computer use, Docker) va sur l'URL, récupère les médias in-scope
+2. COLLECT agent (computer use, Docker) goes to the URL, fetches in-scope media
         ▼
-3. Agent VÉRIF : pré-check mineur → match embeddings visage → score deepfake
+3. VERIFY agent: minor pre-check → face embeddings match → deepfake score
         ▼
-4. Agent LÉGAL : résout l'hébergeur, rédige la notice DSA art.16 (+ déclaration bonne foi + ligne transparence IA)
+4. LEGAL agent: resolves the host, drafts the DSA art.16 notice (+ good-faith statement + AI transparency line)
         ▼
-5. ⛔ GATE : la victime relit et APPROUVE la notice (elle garde le contrôle, ne rédige rien)
+5. ⛔ GATE: the victim reviews and APPROVES the notice (they stay in control, write nothing)
         ▼
-6. Agent LÉGAL remplit le formulaire de signalement / envoie le mail à l'hébergeur
+6. LEGAL agent fills the reporting form / sends the mail to the host
         ▼
-7. J+7 : re-check automatique → contenu retiré ? sinon relance / escalade
+7. D+7: automatic re-check → content removed? otherwise re-send / escalate
 ```
 
-**Ce que la victime fait** : coller une URL, signer, cliquer « approuver ». **Ce qu'elle ne fait jamais** : scroller le contenu, chercher l'hébergeur, rédiger du juridique, répéter pour chaque site.
+**What the victim does**: paste a URL, sign, click "approve". **What they never do**: scroll the content, find the host, write legalese, repeat for every site.
 
 ---
 
-## 7. Sécurité mineurs — non négociable (override tout)
+## 7. Minor safety — non-negotiable (overrides everything)
 
-Si le pré-check d'âge de l'Analyzer suggère une personne **mineure**, le contenu est un **potentiel CSAM**. Mira **NE** télécharge pas, **NE** hash pas, **NE** stocke pas, **NE** traite pas. Il **halte** (statut `ESCALATED`), **réfère** à l'autorité compétente (en France : **PHAROS**) et remonte à un opérateur humain. Détection + signalement, **jamais** manipulation — stocker ou transmettre du CSAM, même « comme preuve », est un délit grave.
+If the Analyzer's age pre-check suggests a **minor**, the content is **potential CSAM**. Mira does **NOT** download, does **NOT** hash, does **NOT** store, does **NOT** process. It **halts** (status `ESCALATED`), **refers** to the competent authority (in France: **PHAROS**) and reports to a human operator. Detection + reporting, **never** manipulation — storing or transmitting CSAM, even "as evidence", is a serious offense.
 
 ---
 
-## 8. Aspect légal — dépôt d'URL & accord de la victime
+## 8. Legal aspect — URL submission & victim consent
 
-> Le cœur juridique de Mira. **Sans mandat valide, l'agent ne fait rien.** Le consentement n'est pas une politesse : sous le RGPD, c'est **ce qui rend le traitement de l'image licite tout court**.
+> Mira's legal core. **Without a valid mandate, the agent does nothing.** Consent isn't a courtesy: under GDPR, it's **what makes processing the image lawful at all**.
 
-### 8.1 Pourquoi le dépôt d'URL + accord est la clé de voûte
+### 8.1 Why URL submission + consent is the keystone
 
-| Question | Réponse Mira |
+| Question | Mira's answer |
 |---|---|
-| **Base légale du traitement ?** | Consentement explicite de la victime (RGPD Art. 6(1)(a) + Art. 9(2)(a), donnée sensible) et/ou constatation de droits en justice (Art. 9(2)(f)), **borné au scope du mandat**. |
-| **Objet du délit visé** | Diffusion de deepfake non consenti — Code pénal **art. 226-8-1** (loi SREN n° 2024-449). Pour le contenu sexuel, le fait que le montage soit « évidemment faux » **n'exonère pas**. |
-| **Mécanisme de retrait** | **DSA art. 16** : tout hébergeur doit offrir un mécanisme notice-and-action. Une notice conforme crée une présomption de connaissance → l'hébergeur doit agir « dans les meilleurs délais ». |
-| **Signature** | En **France**, la plainte en ligne exige la **signature de la victime**. D'où le mandat signé au KYC. |
-| **Fausse notice** | La **LCEN** punit une notification sciemment fausse (1 an / 15 000 €) → **chaque notice porte une déclaration de bonne foi et d'exactitude**. |
-| **Transparence IA** | L'**AI Act** impose de dire que la notice est produite par un système IA assistif agissant sur mandat. Ligne obligatoire dans chaque envoi. |
+| **Legal basis for processing?** | Explicit consent of the victim (GDPR Art. 6(1)(a) + Art. 9(2)(a), sensitive data) and/or establishment of legal claims (Art. 9(2)(f)), **bounded to the mandate's scope**. |
+| **Targeted offense** | Distribution of non-consensual deepfakes — Penal Code **art. 226-8-1** (SREN law no. 2024-449). For sexual content, the fact that the montage is "obviously fake" **does not exonerate**. |
+| **Takedown mechanism** | **DSA art. 16**: every host must offer a notice-and-action mechanism. A compliant notice creates a presumption of knowledge → the host must act "without undue delay". |
+| **Signature** | In **France**, the online complaint requires the **victim's signature**. Hence the mandate signed at KYC. |
+| **False notice** | The **LCEN** punishes a knowingly false notification (1 year / €15,000) → **every notice carries a good-faith and accuracy statement**. |
+| **AI transparency** | The **AI Act** requires stating that the notice is produced by an assistive AI system acting on mandate. Mandatory line in every send. |
 
-### 8.2 L'objet `Mandate` (le contrat)
+### 8.2 The `Mandate` object (the contract)
 
 ```
 Mandate {
-  case_id          : identifiant opaque, zéro PII dedans
+  case_id          : opaque identifier, zero PII inside
   requester_role   : "victim" | "legal_rep" | "authorized_ngo"
-  consent_ts_utc   : horodatage du consentement
-  scope_urls       : les surfaces autorisées, UNIQUEMENT
-  consent_artifact : preuve de consentement chiffrée (mandat signé)
-  active           : false dès révocation → purge du dossier
+  consent_ts_utc   : consent timestamp
+  scope_urls       : the authorized surfaces, ONLY
+  consent_artifact : encrypted proof of consent (signed mandate)
+  active           : false on revocation → purge the case
 }
 ```
 
-### 8.3 Minimisation des données (anti re-victimisation)
+### 8.3 Data minimization (anti re-victimization)
 
-- **On stocke les URLs + hash + embeddings, JAMAIS les images.** Les embeddings sont générés **côté client** → l'image ne quitte pas le device de la victime. En cas de fuite de la base Mira : **aucune image sensible exposée**.
-- Octets bruts seulement si strictement nécessaire pour une action en justice → **chiffrés au repos, access-loggés, rétention limitée**.
-- **Révocation = purge complète** du dossier (droit à l'effacement).
+- **We store URLs + hash + embeddings, NEVER the images.** The embeddings are generated **client-side** → the image never leaves the victim's device. If Mira's database leaks: **no sensitive image exposed**.
+- Raw bytes only if strictly necessary for legal action → **encrypted at rest, access-logged, limited retention**.
+- **Revocation = full purge** of the case (right to erasure).
 
-### 8.4 Le cas V2 (goal max) — la ligne rouge à tenir
+### 8.4 The V2 case (stretch goal) — the red line to hold
 
-Le scan-visage-puis-crawl est **légalement défendable seulement si** :
-1. C'est **le propre visage de la victime** (pas un tiers).
-2. **Consentement explicite** et éclairé, spécifiquement pour la recherche proactive (Art. 9(2)(a)).
-3. Périmètre = **allowlist restreinte** de sites connus, **pas l'open web**.
-4. **DPIA** (Art. 35) réalisée avant tout traitement réel.
+Face-scan-then-crawl is **legally defensible only if**:
+1. It's **the victim's own face** (not a third party).
+2. **Explicit** and informed **consent**, specifically for proactive search (Art. 9(2)(a)).
+3. Scope = **restricted allowlist** of known sites, **not the open web**.
+4. **DPIA** (Art. 35) carried out before any real processing.
 
-> Sans ces quatre conditions, V2 n'est pas « ambitieux », il est **illicite**. C'est exactement pour ça qu'on le garde en roadmap et qu'on ne le démontre pas sur des données réelles.
+> Without these four conditions, V2 isn't "ambitious", it's **unlawful**. That's exactly why we keep it on the roadmap and don't demo it on real data.
 
 ---
 
-## 9. Répartition des rôles → lanes du repo
+## 9. Role split → repo lanes
 
-| Personne | Rôle | Lane |
+| Person | Role | Lane |
 |---|---|---|
-| **Ilan** | **Tech Lead** : backend (relais) + pont front↔workflow + **Google Computer Use** (archi / R&D / intégration en code) + résolution des PR | L2 + L5 |
-| **Anne-Sal** | **Computer Use** — implémentation de l'agent de collecte (binôme CU avec Ilan) | L1 |
-| **nada** | Agent de **vérification** (comparaison d'images / embeddings) + **stockage** + **aspects légaux** | L1 / L2 |
-| **Yue** | **Orchestration** de l'agentic flow + **infra Cloud Run / Docker** | L4 |
-| **Com** | **Direction artistique / storytelling** + **frontend UI** | L3 |
+| **Ilan** | **Tech Lead**: backend (relay) + front↔workflow bridge + **Google Computer Use** (architecture / R&D / code integration) + PR resolution | L2 + L5 |
+| **Anne-Sal** | **Computer Use** — implementing the collect agent (CU pair with Ilan) | L1 |
+| **nada** | **Verify** agent (image comparison / embeddings) + **storage** + **legal aspects** | L1 / L2 |
+| **Yue** | **Orchestration** of the agentic flow + **Cloud Run / Docker infra** | L4 |
+| **Com** | **Art direction / storytelling** + **frontend UI** | L3 |
 
-Synchro équipe : **toutes les 2-3 h**.
-
----
-
-## 10. Stratégie de démo (rappel réunion)
-
-- **3 vidéos de démo, pas de slides** (format imposé). 1 image de présentation du projet, 3 éléments max.
-- **Images floutées** pour simuler le scraping — **jamais de NSFW réel** montré au jury. Le match facial se démontre en ne montrant **que le visage** (corps flouté).
-- **Environnement mock only** : faux mandat, médias de test synthétiques (adultes, pas de vraies personnes), boîte mail de démo dédiée, cible RDAP sur domaine de test contrôlé.
-- Montrer aussi le **chemin mineur** sur un cas synthétique séparé qui déclenche bien le halt-and-escalate (référence loggée, zéro stockage).
-- **Roadmap à pitcher** : 5-6 évolutions (enfants, comparatif, scroll étendu, V2 scan-visage…). Le jury note ~15 % sur la vision long terme.
+Team sync: **every 2-3h**.
 
 ---
 
-## 11. Garde-fous à ne jamais violer (checklist)
+## 10. Demo strategy (meeting recap)
 
-- [ ] **G-1** Aucun agent ne tourne sans `Mandate.active` (base légale RGPD).
-- [ ] **G-2** Le Locator reste **strictement dans le scope** — zéro surveillance de l'open web (en V1).
-- [ ] **G-3** Computer use **dans Docker**, jamais sur le device de la victime.
-- [ ] **G-4** Pré-check mineur **avant tout stockage** → halt + escalade PHAROS.
-- [ ] **G-5** Hash perceptuel + embeddings **plutôt que** octets bruts ; on chiffre le peu qu'on retient.
-- [ ] **G-6** **Gate de confirmation victime** avant tout envoi externe.
-- [ ] **G-7** Chaque notice = **déclaration de bonne foi** + **ligne transparence IA** + base légale exacte (jamais inventer de montant de sanction).
-- [ ] **G-8** Révocation du mandat = **purge** du dossier.
-- [ ] **G-9** Zéro secret commité (`.env.local`, template dans `.env.example`).
-- [ ] **G-10** Démo = **mock only**, aucune vraie victime, aucun contenu réel, aucune plateforme hostile live.
+- **3 demo videos, no slides** (imposed format). 1 project presentation image, 3 elements max.
+- **Blurred images** to simulate the scraping — **never real NSFW** shown to the jury. The facial match is demoed by showing **only the face** (body blurred).
+- **Mock-only environment**: fake mandate, synthetic test media (adults, no real people), dedicated demo mailbox, RDAP target on a controlled test domain.
+- Also show the **minor path** on a separate synthetic case that correctly triggers the halt-and-escalate (logged reference, zero storage).
+- **Roadmap to pitch**: 5-6 evolutions (children, comparison, extended scroll, V2 face-scan…). The jury scores ~15% on the long-term vision.
+
+---
+
+## 11. Guardrails never to violate (checklist)
+
+- [ ] **G-1** No agent runs without `Mandate.active` (GDPR legal basis).
+- [ ] **G-2** The Locator stays **strictly within scope** — zero open-web surveillance (in V1).
+- [ ] **G-3** Computer use **in Docker**, never on the victim's device.
+- [ ] **G-4** Minor pre-check **before any storage** → halt + escalate to PHAROS.
+- [ ] **G-5** Perceptual hash + embeddings **rather than** raw bytes; we encrypt the little we retain.
+- [ ] **G-6** **Victim confirmation gate** before any external send.
+- [ ] **G-7** Every notice = **good-faith statement** + **AI transparency line** + exact legal basis (never invent a penalty amount).
+- [ ] **G-8** Mandate revocation = **purge** of the case.
+- [ ] **G-9** Zero committed secret (`.env.local`, template in `.env.example`).
+- [ ] **G-10** Demo = **mock only**, no real victim, no real content, no live hostile platform.
