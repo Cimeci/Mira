@@ -1,0 +1,8 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - dev.env          # create this on the VM (gitignored); holds runtime secrets
+    restart: unless-stopped

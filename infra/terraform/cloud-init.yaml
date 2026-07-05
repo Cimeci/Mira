@@ -1,0 +1,8 @@
+#cloud-config
+package_update: true
+packages:
+  - git
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - usermod -aG docker ubuntu
+  - systemctl enable --now docker
