@@ -25,3 +25,11 @@ PLAN.local.md
 
 # Local runtime env (secrets) — never committed
 dev.env
+
+# Face test fixtures: real photos, not redistributable
+tests/fixtures/faces/*.jpg
+tests/fixtures/faces/*.png
+
+# Nudity test fixtures (sensitive, not redistributable)
+tests/fixtures/nudity/*.jpg
+tests/fixtures/nudity/*.png
