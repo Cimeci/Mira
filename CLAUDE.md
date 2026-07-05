@@ -1,92 +1,92 @@
 # CLAUDE.md — Mira (RAISE Hackathon 2026)
 
-Tu aides à construire **Mira** pendant un hackathon de ~15h, au sein d'une **équipe de 5**. Une grande partie du code se fait avec Claude Code (mais pas tout, et ce n'est pas obligatoire pour l'équipe). Ta mission : shipper une **démo qui marche**, garder un code **cohérent entre plusieurs contributeurs en parallèle**, et tenir un **niveau d'ingénieur senior** sans ralentir personne.
+You are helping build **Mira** during a ~15h hackathon, as part of a **team of 5**. A large share of the code is written with Claude Code (but not all, and it is not mandatory for the team). Your mission: ship a **demo that works**, keep the code **coherent across several parallel contributors**, and hold a **senior-engineer standard** without slowing anyone down.
 
-Repo : `github.com/Cimeci/Mira` · Workflow humain détaillé : `CONTRIBUTING.md` · Board : `TASKS.md`.
-
----
-
-## 🟢 Au début de CHAQUE session
-1. **Demande au dev quelle lane il possède** (L1 Core/Agent · L2 Backend/API · L3 UI · L4 Infra · L5 Démo). Travaille dans les dossiers de SA lane. **Ne modifie pas le code d'une autre lane sans le signaler** — c'est la cause n°1 de conflits.
-2. Rappelle-toi : **`main` doit toujours être déployable**. Jamais de commit direct sur `main`. Tout passe par une branche + PR.
-3. En cas de doute sur une règle : elle est ici ou dans `CONTRIBUTING.md`. Ne l'invente pas.
-
-## 🎯 Comment on est jugé → ta fonction de priorité
-**Demo 50% · Impact 25% · Créativité 15% · Pitch 10%.**
-À chaque arbitrage, pose-toi : *« est-ce que ça rend la démo live plus fiable ou plus impressionnante ? »* Si non → coupe. Une feature qui ne se démontre pas en direct ne vaut rien ce week-end.
-
-## 🚧 Le cadre (règles orga, non négociables)
-- **100% open source, licence MIT** (déjà en place). Repo public.
-- **NEW WORK ONLY, vérifié** : interdit de réutiliser du code préexistant. **Ne jamais importer/copier Softcallia, ProspAction, Pyralys, prospector-suite.** Tout part de zéro dans ce repo.
-- **Anti-projets bannis (disqualifiants)** : RAG basique, Streamlit, image analyzer, chatbot générique, CV screener, conseil médical. → viser **technique / agentique / infra**.
-- **Deliverables** : formulaire + **vidéo 1 min** + pitch R1 ~3 min.
-- Le contenu de `reference/` est **inspiration seulement**, jamais réutilisé comme code (règle new-work-only).
+Repo: `github.com/Cimeci/Mira` · Detailed human workflow: `CONTRIBUTING.md` · Board: `TASKS.md`.
 
 ---
 
-## 🧠 Le standard d'ingénierie — « senior, pas bâclé »
-Senior ≠ lent. Senior = **choisir délibérément ce qu'on fait bien et ce qu'on skippe**, et ne jamais shipper un truc qui casse en silence.
+## 🟢 At the start of EVERY session
+1. **Ask the dev which lane they own** (L1 Core/Agent · L2 Backend/API · L3 UI · L4 Infra · L5 Demo). Work in the folders of THEIR lane. **Don't modify another lane's code without flagging it** — that's the #1 cause of conflicts.
+2. Remember: **`main` must always be deployable**. Never commit directly to `main`. Everything goes through a branch + PR.
+3. When in doubt about a rule: it's here or in `CONTRIBUTING.md`. Don't invent it.
 
-- **Les types sont des contrats** : TypeScript strict. Pas de `any` sans `// raison`, pas de `@ts-ignore` sans commentaire. Modélise les données avec des types précis — un mauvais type = un bug de démo en puissance.
-- **Fonctions courtes, nommées, une seule responsabilité.** Un fichier = une chose. Nomme pour que le coéquipier lise une fois et comprenne.
-- **Pas d'abstraction prématurée.** Deux usages avant d'extraire. Dupliquer une fois est OK ; à la troisième, on factorise.
-- **Zéro échec silencieux.** Pas de `catch {}` vide. Si ça peut planter pendant la démo, ça doit gueuler en dev. Valide les entrées aux frontières (handlers API, données externes).
-- **Fail fast.** Un état impossible doit crasher tôt et clairement, pas produire un résultat faux plus loin.
-- **Supprime le code mort.** Pas de blocs commentés « au cas où ». Git garde l'historique.
-- **Les commentaires expliquent le POURQUOI, jamais le QUOI.** Le code dit le quoi.
+## 🎯 How we're judged → your priority function
+**Demo 50% · Impact 25% · Creativity 15% · Pitch 10%.**
+On every trade-off, ask yourself: *"does this make the live demo more reliable or more impressive?"* If not → cut it. A feature that can't be demoed live is worth nothing this weekend.
 
-## ✂️ Ce qu'on skippe délibérément (c'est un hackathon)
-- **Tests exhaustifs** → NON. On teste **une seule chose : le chemin de démo end-to-end**. Rien d'autre n'a besoin de couverture.
-- **Edge cases hors démo** → happy path + les 2-3 inputs qu'on montrera en live, point.
-- **Config spéculative** (feature flags, i18n, theming avancé, micro-optims) → non, sauf si ça sert la démo.
-- Si tu hésites entre « propre » et « démontrable maintenant » → **démontrable maintenant**, puis on nettoie si le temps le permet.
-
-## 🔁 Cohérence entre les 5 Claude (crucial)
-5 sessions Claude indépendantes éditent ce repo. **La cohérence prime sur la cleverness :**
-- **Grep avant d'écrire** : réutilise un composant/util existant plutôt que d'en créer un doublon.
-- **Suis le pattern du fichier que tu édites** plutôt que ta préférence perso.
-- **Aligne-toi** sur le nommage, la structure de dossiers et le style d'import déjà présents.
-- Nouvelle dépendance ou nouveau pattern structurant → **signale-le** (ça impacte les 4 autres).
+## 🚧 The frame (org rules, non-negotiable)
+- **100% open source, MIT license** (already in place). Public repo.
+- **NEW WORK ONLY, verified**: reusing pre-existing code is forbidden. **Never import/copy Softcallia, ProspAction, Pyralys, prospector-suite.** Everything starts from scratch in this repo.
+- **Banned anti-projects (disqualifying)**: basic RAG, Streamlit, image analyzer, generic chatbot, CV screener, medical advice. → aim for **technical / agentic / infra**.
+- **Deliverables**: form + **1-min video** + ~3-min R1 pitch.
+- The contents of `reference/` are **inspiration only**, never reused as code (new-work-only rule).
 
 ---
 
-## 🌿 Git & collaboration (détail complet dans `CONTRIBUTING.md`)
+## 🧠 The engineering standard — "senior, not sloppy"
+Senior ≠ slow. Senior = **deliberately choosing what to do well and what to skip**, and never shipping something that fails silently.
+
+- **Types are contracts**: strict TypeScript. No `any` without a `// reason`, no `@ts-ignore` without a comment. Model data with precise types — a bad type = a demo bug waiting to happen.
+- **Short, named, single-responsibility functions.** One file = one thing. Name it so a teammate reads it once and understands.
+- **No premature abstraction.** Two uses before extracting. Duplicating once is OK; on the third, factor it out.
+- **Zero silent failure.** No empty `catch {}`. If it can crash during the demo, it must scream in dev. Validate inputs at the boundaries (API handlers, external data).
+- **Fail fast.** An impossible state must crash early and clearly, not produce a wrong result further down.
+- **Delete dead code.** No commented-out blocks "just in case". Git keeps the history.
+- **Comments explain the WHY, never the WHAT.** The code says the what.
+
+## ✂️ What we deliberately skip (it's a hackathon)
+- **Exhaustive tests** → NO. We test **one thing only: the end-to-end demo path**. Nothing else needs coverage.
+- **Edge cases outside the demo** → happy path + the 2-3 inputs we'll show live, that's it.
+- **Speculative config** (feature flags, i18n, advanced theming, micro-optimizations) → no, unless it serves the demo.
+- If you hesitate between "clean" and "demoable now" → **demoable now**, then clean up if time allows.
+
+## 🔁 Coherence across the 5 Claudes (crucial)
+5 independent Claude sessions edit this repo. **Coherence beats cleverness:**
+- **Grep before writing**: reuse an existing component/util rather than creating a duplicate.
+- **Follow the pattern of the file you're editing** rather than your personal preference.
+- **Align** with the naming, folder structure and import style already present.
+- New dependency or new structural pattern → **flag it** (it impacts the other 4).
+
+---
+
+## 🌿 Git & collaboration (full detail in `CONTRIBUTING.md`)
 ```bash
-git checkout main && git pull              # partir d'un main à jour
-git checkout -b l3/ma-feature              # branche = <lane>/<slug>, courte durée de vie
+git checkout main && git pull              # start from an up-to-date main
+git checkout -b l3/my-feature              # branch = <lane>/<slug>, short-lived
 # ... code ...
-pnpm check                                 # typecheck + lint + format — DOIT être vert
-git add -A && git commit -m "feat(ui): ma feature"
-git push -u origin l3/ma-feature
-gh pr create --fill                        # PR → 1 relecture rapide → merge
+pnpm check                                 # typecheck + lint + format — MUST be green
+git add -A && git commit -m "feat(ui): my feature"
+git push -u origin l3/my-feature
+gh pr create --fill                        # PR → 1 quick review → merge
 ```
-- **Branches courtes**, mergées en 1-2h. `git pull --rebase origin main` souvent.
-- **Commits** : `feat|fix|chore|refactor(scope): message`. Petits et fréquents.
-- **`main` cassé = tout le monde s'arrête**, L4 (Infra) répare en priorité.
-- **Jamais de secret commité** → `.env.local` (gitignored), template dans `.env.example`.
+- **Short branches**, merged within 1-2h. `git pull --rebase origin main` often.
+- **Commits**: `feat|fix|chore|refactor(scope): message`. Small and frequent.
+- **Broken `main` = everyone stops**, L4 (Infra) fixes it first.
+- **Never commit a secret** → `.env.local` (gitignored), template in `.env.example`.
 
-## ✅ Vérifie AVANT de dire que c'est fait
-La démo est notée en live. « Ça devrait marcher » ≠ « ça marche ».
-- **Exécute réellement le flux** (`pnpm dev`, ouvre la route, clique le bouton) et **observe le résultat** avant de conclure.
-- Surface déployée modifiée → vérifie le **preview Vercel**, pas seulement localhost.
-- Avant de push : `pnpm check` vert. Non négociable.
+## ✅ Verify BEFORE saying it's done
+The demo is judged live. "It should work" ≠ "it works".
+- **Actually run the flow** (`pnpm dev`, open the route, click the button) and **observe the result** before concluding.
+- Modified a deployed surface → check the **Vercel preview**, not just localhost.
+- Before pushing: `pnpm check` green. Non-negotiable.
 
-## 🛠️ Stack & commandes
-- **Cœur : Python 3.11 + asyncio** (imposé par la spec Mira). Package `mira/` : 4 stages (mandate/locator/analyzer/notifier) + `orchestrator` (consent gate) + `types` (contrats gelés). Le pipeline tourne end-to-end sur des **mocks** ; chaque lane remplace le mock de son stage par le vrai, derrière la même interface.
-- **Surface démo (front)** : à trancher (Next.js+FastAPI SSE, ou tout-Python FastAPI+SSE). Pas de Streamlit (banni).
-- **LLM** : rédaction de notice / instructions locator. Track Google → **Gemini/Gemma** ; sinon **Claude** (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`).
-- Commandes : `bash setup.sh` (venv + deps) · `python -m mira.demo` (les 3 beats, mocks) · `pytest -q` · `ruff check .`. Le squelette tourne **sans rien installer** (stdlib) : `python3.11 -m mira.demo`.
-- Toolchain : python 3.11 (Homebrew), node 24, pnpm 9, vercel CLI, gh, git.
+## 🛠️ Stack & commands
+- **Core: Python 3.11 + asyncio** (imposed by the Mira spec). `mira/` package: 4 stages (mandate/locator/analyzer/notifier) + `orchestrator` (consent gate) + `types` (frozen contracts). The pipeline runs end-to-end on **mocks**; each lane swaps its stage's mock for the real thing, behind the same interface.
+- **Demo surface (front)**: to decide (Next.js+FastAPI SSE, or all-Python FastAPI+SSE). No Streamlit (banned).
+- **LLM**: notice drafting / locator instructions. Google track → **Gemini/Gemma**; otherwise **Claude** (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5-20251001`).
+- Commands: `bash setup.sh` (venv + deps) · `python -m mira.demo` (the 3 beats, mocks) · `pytest -q` · `ruff check .`. The skeleton runs **with nothing installed** (stdlib): `python3.11 -m mira.demo`.
+- Toolchain: python 3.11 (Homebrew), node 24, pnpm 9, vercel CLI, gh, git.
 
-## 🔒 Guardrails Mira (issus de la spec §13 — non négociables)
-- **G-1** aucun stage ne tourne sans `Mandate.active` (vérifié dans l'orchestrateur, une fois).
-- **G-2** le Locator reste strictement dans `scope_urls` (pas de web ouvert).
-- **G-6** pré-check mineur AVANT tout stockage ; mineur suspecté → **halt + escalade, jamais de download/hash/store**.
-- **G-5** hash perceptuel préféré aux octets bruts ; chiffrer ce qui est retenu.
-- **G-7** gate de confirmation victime avant tout envoi externe.
-- **G-9** la notice cite la base légale exacte, **n'invente jamais de pénalité**.
-- **G-12** la démo cible un mock host + inbox de démo uniquement — jamais de vrai contenu/plateforme.
-- En démo, le flag mineur se déclenche par **metadata/URL**, jamais par une image de mineur.
+## 🔒 Mira guardrails (from spec §13 — non-negotiable)
+- **G-1** no stage runs without `Mandate.active` (checked in the orchestrator, once).
+- **G-2** the Locator stays strictly within `scope_urls` (no open web).
+- **G-6** minor pre-check BEFORE any storage; suspected minor → **halt + escalate, never download/hash/store**.
+- **G-5** perceptual hash preferred over raw bytes; encrypt whatever is retained.
+- **G-7** victim confirmation gate before any external send.
+- **G-9** the notice cites the exact legal basis, **never invents a penalty**.
+- **G-12** the demo targets a mock host + demo inbox only — never real content/platform.
+- In the demo, the minor flag is triggered by **metadata/URL**, never by an image of a minor.
 
-## 📂 Fichiers du repo
-`README.md` cockpit · `ARCHITECTURE.md` moteur agentique (computer use Gemini + workflow des agents + infra Cloud Run/Browserbase + frontend/backend/branding + cadre légal) · `CONTRIBUTING.md` workflow · `TASKS.md` board · `CHEATSHEET.md` playbook skills · `mira/` le code · `tests/` smoke tests · `reference/` inspiration (jamais réutilisée comme code).
+## 📂 Repo files
+`README.md` cockpit · `ARCHITECTURE.md` agentic engine (Gemini computer use + agent workflow + Cloud Run/Browserbase infra + frontend/backend/branding + legal frame) · `CONTRIBUTING.md` workflow · `TASKS.md` board · `CHEATSHEET.md` skills playbook · `mira/` the code · `tests/` smoke tests · `reference/` inspiration (never reused as code).

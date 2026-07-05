@@ -1,4 +1,4 @@
-# mira — frontend
+# Mira — Frontend
 
 Next.js (App Router, TypeScript, Tailwind) implementation of the Mira victim-facing
 prototype, built from the Claude Design handoff bundle.
