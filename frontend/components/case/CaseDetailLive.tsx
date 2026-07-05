@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/ui/LinkButton";
 import { Button } from "@/components/ui/Button";
 import { CaseCard } from "./CaseCard";
 import { CaseTimeline } from "./CaseTimeline";
+import { AgentLiveView } from "./AgentLiveView";
 import { useEventSource, type SSEEvent } from "@/lib/useEventSource";
 import { isGateOpen, statusLabel, targetLabel, timelineFor } from "@/lib/caseProgress";
 
@@ -14,7 +15,7 @@ const FOOTER = "mira is handling it — you stay in control of every legal step.
 
 interface StageEventPayload {
   to_status?: string;
-  payload?: { url?: string };
+  payload?: { url?: string; scope_urls?: string[] };
 }
 
 type Phase = "loading" | "notfound" | "ready";
@@ -30,6 +31,12 @@ export function CaseDetailLive({ caseId, apiBase }: { caseId: string; apiBase: s
   const [phase, setPhase] = useState<Phase>("loading");
   const [status, setStatus] = useState<string | null>(null);
   const [target, setTarget] = useState<string>("");
+  // The real url the victim submitted (mandate scope) — the only thing the live
+  // agent view is allowed to crawl. Distinct from `target` (located item shown on
+  // the card). Set from the replayed mandate event, so it survives a reload.
+  const [scopeUrl, setScopeUrl] = useState<string | null>(null);
+  // Latches once: only auto-run the agent crawl for a case that isn't done yet.
+  const [runAgent, setRunAgent] = useState(false);
   const [notice, setNotice] = useState<{ url: string; text: string } | null>(null);
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +61,7 @@ export function CaseDetailLive({ caseId, apiBase }: { caseId: string; apiBase: s
         setStatus(d.current_status ?? null);
         setNotice(d.pending_notice ?? null);
         setFinished(Boolean(d.finished));
+        setRunAgent(!Boolean(d.finished));
         setPhase("ready");
       } catch {
         // A dead backend must not leave a blank screen: surface it, still stream.
@@ -73,6 +81,9 @@ export function CaseDetailLive({ caseId, apiBase }: { caseId: string; apiBase: s
       const ev = msg.event as StageEventPayload;
       if (ev.to_status) setStatus(ev.to_status);
       if (ev.payload?.url) setTarget(ev.payload.url);
+      // The mandate carries the victim's submitted scope — the real crawl target.
+      const scope = ev.payload?.scope_urls?.[0];
+      if (scope) setScopeUrl(scope);
     } else if (msg.kind === "notice") {
       setNotice({ url: msg.url ?? "", text: msg.text ?? "" });
     } else if (msg.kind === "done") {
@@ -148,6 +159,8 @@ export function CaseDetailLive({ caseId, apiBase }: { caseId: string; apiBase: s
             targetLabel={targetLabel(target)}
             status={statusLabel(status)}
           />
+
+          <AgentLiveView run={runAgent} targetUrl={scopeUrl} />
 
           {error && <p className="text-caption text-mira-danger">{error}</p>}
 
