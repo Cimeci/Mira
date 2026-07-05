@@ -25,3 +25,6 @@ PLAN.local.md
 
 # Local runtime env (secrets) — never committed
 dev.env
+
+# Runtime evidence volume (spec §10) — never commit case data
+evidence/

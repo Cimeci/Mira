@@ -53,9 +53,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import store
+from .cu.guard import OutOfScopeError
+from .cu.scraper import _validate_url
 from .events import StageEvent
 from .mandate import capture_consent, create_demo_mandate
 from .orchestrator import ConsentError, dispatch, run_until_gate
+from .scout import scout_case
 from .types import Mandate, Status
 
 app = FastAPI(title="Mira — API pipeline (L2)")
@@ -178,6 +181,13 @@ class Verdict(BaseModel):
     )
 
 
+class ScoutRequest(BaseModel):
+    """Corps de POST /scout : l'URL soumise + un case_id optionnel (sinon généré)."""
+
+    url: str
+    case_id: str | None = None
+
+
 def _new_case_id() -> str:
     """Id opaque, sans PII, unique par process (secrets -> pas de collision pratique)."""
     return f"case-{secrets.token_hex(4)}"
@@ -298,6 +308,64 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
         "state_url": f"/cases/{case_id}",
         "events_url": f"/cases/{case_id}/events",
         "confirm_url": f"/cases/{case_id}/confirm",
+    }
+
+
+async def _run_scout(run: CaseRun, url: str) -> None:
+    """Tâche de fond : dispatch le scout pour ce case et diffuse chaque image extraite.
+
+    Le scout REPLIE chaque URL trouvée dans l'état du case via `emit` (StageEvent
+    LOCATED) — même colonne vertébrale que le pipeline. Aucune analyse/notification
+    ici (Step 1 : localisation seule) ; le pipeline mock reste inchangé par ailleurs.
+    """
+
+    def emit(event: StageEvent) -> None:
+        _publish(run, {"kind": "stage", "event": event.to_dict()})
+
+    try:
+        images = await scout_case(run.case_id, url, emit=emit)
+        statuses = {u: Status.LOCATED.value for u in images}
+        _publish(run, {"kind": "done", "case_id": run.case_id, "statuses": statuses})
+    except Exception as exc:  # noqa: BLE001 — toute panne devient un event SSE terminal, jamais un silence
+        _publish(
+            run,
+            {"kind": "error", "case_id": run.case_id, "message": f"{type(exc).__name__}: {exc}"},
+        )
+    finally:
+        run.finished = True
+        _close(run)
+
+
+@app.post("/scout")
+async def scout(req: ScoutRequest) -> dict[str, str]:
+    """Dispatch le scout Computer Use SOUS un case (jamais standalone) et renvoie ses URLs de suivi.
+
+    Le scout est piloté par le case : on crée le CaseRun, puis on lance le scout en
+    tâche de fond ; ses images extraites reviennent dans l'état du case (SSE + terminal).
+    """
+    case_id = req.case_id or _new_case_id()
+    if not _CASE_ID_RE.fullmatch(case_id):
+        raise HTTPException(
+            status_code=400, detail="case_id invalide : ^[A-Za-z0-9_-]{1,64}$ attendu"
+        )
+    if case_id in _RUNS:
+        raise HTTPException(status_code=409, detail=f"case_id déjà utilisé : {case_id}")
+    # Fail-fast à la frontière AVANT de créer le case : URL http/https + host in-scope
+    # (G-2/G-12). Une URL hors périmètre est un 400, pas un case fantôme.
+    try:
+        _validate_url(req.url.strip())
+    except (OutOfScopeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    run = CaseRun(case_id=case_id)
+    _RUNS[case_id] = run
+    task = asyncio.create_task(_run_scout(run, req.url.strip()))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return {
+        "case_id": case_id,
+        "state_url": f"/cases/{case_id}",
+        "events_url": f"/cases/{case_id}/events",
     }
 
 

@@ -23,14 +23,23 @@ from .live import data_uri
 from .models import ScrapedImage, ScrapeResult
 from .scraper import _resolve_creds, _validate_url, extract_images
 
-MODEL = "gemini-2.5-computer-use-preview-10-2025"
+MODEL = "gemini-3-flash-preview"
 _MAX_STEPS = 12
 _ENV_FILE = ".env.local"
 _FRAME_QUALITY = 55  # JPEG : compromis netteté / poids pour le stream
 
+# Le premier nom non vide gagne : on tolère les deux conventions (la nôtre
+# historique + GEMINI_API_KEY du SDK google-genai) pour éviter un run mort à cause
+# d'un simple écart de nommage dans .env.local.
+_API_KEY_NAMES = ("GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY")
+
 
 def _api_key() -> str | None:
-    return dotenv_values(_ENV_FILE).get("GOOGLE_GENERATIVE_AI_API_KEY")
+    values = dotenv_values(_ENV_FILE)
+    for name in _API_KEY_NAMES:
+        if values.get(name):
+            return values[name]
+    return None
 
 
 def _redact(text: str, email: str, password: str) -> str:
@@ -68,6 +77,22 @@ def _config() -> types.GenerateContentConfig:
     )
 
 
+async def _shot(page: Page, **kwargs: object) -> bytes:
+    """Capture d'écran avec petit retry. chrome-headless-shell rate parfois sa TOUTE
+    première capture à froid (Protocol error: Unable to capture screenshot) ; un court
+    retry suffit. Sans lui, la démo peut mourir sur le 1er screenshot d'un navigateur
+    fraîchement lancé — exactement le genre de flaky qu'on refuse en live."""
+    last: Exception | None = None
+    for _ in range(3):
+        try:
+            return await page.screenshot(**kwargs)  # type: ignore[arg-type]
+        except Exception as exc:  # noqa: BLE001 — on retente, puis on relaie l'échec
+            last = exc
+            await page.wait_for_timeout(400)
+    assert last is not None
+    raise last
+
+
 async def _run_cu_loop(
     client: genai.Client,
     config: types.GenerateContentConfig,
@@ -80,11 +105,11 @@ async def _run_cu_loop(
     """Boucle vision-action de Gemini sur la page COURANTE (le goto est fait par
     l'appelant). Yield reasoning · action · frame · safety · note. S'arrête quand
     l'agent n'émet plus d'action, sur une action sensible (G-7), ou à la limite."""
-    shot = await page.screenshot(type="png")
+    shot = await _shot(page, type="png")
     yield {
         "type": "frame",
         "label": "page ouverte",
-        "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
+        "image": data_uri(await _shot(page, type="jpeg", quality=_FRAME_QUALITY)),
     }
     contents: list = [
         types.Content(
@@ -100,8 +125,14 @@ async def _run_cu_loop(
         response = await client.aio.models.generate_content(
             model=MODEL, contents=contents, config=config
         )
+        # Le modèle peut renvoyer une réponse SANS candidat (filtrage de sécurité, quota,
+        # réponse vide) : `response.candidates[0]` planterait alors en 'NoneType'. On
+        # traite ça comme « plus d'action » et on s'arrête proprement, jamais un crash.
+        if not response.candidates:
+            yield {"type": "note", "text": "⚠️ agent : réponse vide du modèle — arrêt propre"}
+            return
         candidate = response.candidates[0]
-        parts = candidate.content.parts or []
+        parts = (candidate.content.parts if candidate.content else None) or []
         calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
 
         for part in parts:
@@ -144,11 +175,11 @@ async def _run_cu_loop(
                     ),
                 }
                 return
-            next_png = await page.screenshot(type="png")
+            next_png = await _shot(page, type="png")
             yield {
                 "type": "frame",
                 "label": call.name,
-                "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
+                "image": data_uri(await _shot(page, type="jpeg", quality=_FRAME_QUALITY)),
             }
             response_parts.append(
                 types.Part.from_function_response(
@@ -196,7 +227,7 @@ async def stream_scrape_cu(
                 images = await extract_images(page)
                 final_shot_url = None
                 if screenshot_path:
-                    await page.screenshot(path=screenshot_path, full_page=True)
+                    await _shot(page, path=screenshot_path, full_page=True)
                     final_shot_url = screenshot_url
                 yield {
                     "type": "done",

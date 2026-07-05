@@ -1,0 +1,24 @@
+<!doctype html>
+<!--
+  Staged case fixture — Step 1 test target (spec §7/§8: dev/demo run on a SAFE staged
+  site, never a real account/platform). Four neutral, deterministic, LOCAL images: a
+  scrape failure here means OUR pipeline is broken, not a login wall / captcha / rate
+  limit on some third party. No explicit content. Served on localhost only.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Staged profile — Mira fixture</title>
+  </head>
+  <body>
+    <h1>staged demo profile</h1>
+    <p>synthetic gallery for the Mira locator smoke test — no real people, no explicit content.</p>
+    <section id="gallery">
+      <img src="photo_01.png" alt="staged photo 1" width="400" height="300" />
+      <img src="photo_02.png" alt="staged photo 2" width="400" height="300" />
+      <img src="photo_03.png" alt="staged photo 3" width="400" height="300" />
+      <img src="photo_04.png" alt="staged photo 4" width="400" height="300" />
+    </section>
+  </body>
+</html>

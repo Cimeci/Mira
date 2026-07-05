@@ -6,3 +6,13 @@ services:
     env_file:
       - dev.env          # create this on the VM (gitignored); holds runtime secrets
     restart: unless-stopped
+    # spec §10 — le worker Computer Use pilote un Chromium :
+    #   init:true      → un vrai PID 1 qui reap les zombies (chaque case tue/relance
+    #                    des process navigateur ; sans init ils s'accumulent).
+    #   shm_size 2gb   → /dev/shm par défaut (64 Mo) fait crasher Chromium ; on l'élargit
+    #                    (complément de --disable-dev-shm-usage, cf. mira/cu/browser.py).
+    init: true
+    shm_size: "2gb"
+    volumes:
+      # Écritures de preuve montées hors conteneur (persistées, purgeables) — spec §10.
+      - ./evidence:/app/evidence
