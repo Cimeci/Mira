@@ -18,6 +18,7 @@ export function ScreenShell({
   centered = false,
   footer,
   children,
+  homeHref = "/",
 }: {
   // Omit on non-flow surfaces (e.g. the cases dashboard): the 5-segment bar is
   // an onboarding-flow indicator and is meaningless outside the linear flow.
@@ -26,13 +27,16 @@ export function ScreenShell({
   centered?: boolean;
   footer: ReactNode;
   children: ReactNode;
+  // Where the header wordmark links. App surfaces (dashboard/live) keep the user
+  // inside the app (/dashboard); the onboarding flow returns to the landing.
+  homeHref?: string;
 }) {
   const widthStyle = { maxWidth: contentWidth };
 
   return (
     <div className="relative mx-auto flex min-h-screen w-full max-w-[1440px] flex-col items-center overflow-hidden bg-mira-void">
       <GlowBackdrop />
-      <Header />
+      <Header homeHref={homeHref} />
 
       {progress && (
         <div style={widthStyle} className="mt-7 w-full px-5 sm:px-10 lg:px-0">

@@ -25,4 +25,4 @@ PLAN.local.md
 
 # Artefacts de dev (logs dev.sh, cache incrémental TS)
 .dev-logs/
-frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo

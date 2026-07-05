@@ -27,7 +27,7 @@ const config: Config = {
           "muted-dim": "#6E5F82", // secondary muted used across the prototype
           disabled: "#4B4058",
           // Semantic status colors (neon-tuned to sit in the purple palette).
-          danger: "#FF5C8A", // errors, declined, halts
+          danger: "#FF6B8A", // errors, declined, halts, auth/form error text
           success: "#8CFFBE", // completed / connected
           warn: "#FFC65C", // needs-your-action (gate G-7 awaiting confirm)
           "panel-border": "#6F3E91",

@@ -1,12 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { ScreenTitle } from "@/components/ui/ScreenTitle";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { Button } from "@/components/ui/Button";
 import { CaseCard } from "./CaseCard";
 
 /** Shape returned by GET /cases (mira/api.py:list_cases). */
@@ -26,10 +24,8 @@ function targetLabel(c: ApiCase): string {
 }
 
 export function CaseBoard({ apiBase }: { apiBase: string }) {
-  const router = useRouter();
   const [cases, setCases] = useState<ApiCase[]>([]);
   const [state, setState] = useState<LoadState>("loading");
-  const [starting, setStarting] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -57,24 +53,6 @@ export function CaseBoard({ apiBase }: { apiBase: string }) {
     load();
   }, [load]);
 
-  const startCase = async () => {
-    if (starting) return;
-    setStarting(true);
-    try {
-      const res = await fetch(`${apiBase}/cases`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      const data = (await res.json()) as { case_id: string };
-      router.push(`/case/${data.case_id}/live`);
-    } catch {
-      setStarting(false);
-      setState("error");
-    }
-  };
-
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-6">
@@ -86,9 +64,9 @@ export function CaseBoard({ apiBase }: { apiBase: string }) {
               anything that leaves the building.
             </p>
           </div>
-          <Button variant="flow" size="md" onClick={startCase} disabled={starting}>
-            {starting ? "opening…" : "+ start a live case"}
-          </Button>
+          <LinkButton href="/start" variant="flow" size="md">
+            + start a new case
+          </LinkButton>
         </div>
 
         {state === "ready" && cases.length > 0 && <StatsRow cases={cases} />}

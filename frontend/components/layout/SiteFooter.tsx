@@ -37,6 +37,7 @@ const COLUMNS: {
  * Full site footer for the standalone pages (landing, legal): brand column,
  * link columns, and a copyright bar. Rendered inside a dark brand band on the
  * landing so the neon wordmark stays legible regardless of the page theme.
+ * The flow screens keep the slim trust-line `Footer` instead.
  */
 export function SiteFooter() {
   return (
