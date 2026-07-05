@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Panel } from "@/components/ui/Panel";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { ScreenTitle } from "@/components/ui/ScreenTitle";
+import { AwaitingConfirmation } from "./AwaitingConfirmation";
 
 type Mode = "sign-in" | "sign-up";
 
@@ -32,6 +33,8 @@ export function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // Set after a sign-up that needs email confirmation → shows the waiting screen.
+  const [awaitingEmail, setAwaitingEmail] = useState<string | null>(null);
 
   // Already signed in (or just signed in): continue to the intended screen.
   useEffect(() => {
@@ -50,8 +53,8 @@ export function LoginForm() {
         const result = await signUp(email, password);
         setError(result.error);
         if (!result.error && result.needsConfirmation) {
-          setInfo("account created — confirm it from your inbox, then sign in.");
-          setMode("sign-in");
+          // Keep `password` in state so the waiting screen can auto-retry sign-in.
+          setAwaitingEmail(email);
         }
       }
     } catch (submitError: unknown) {
@@ -64,6 +67,21 @@ export function LoginForm() {
   }
 
   const otherMode: Mode = mode === "sign-in" ? "sign-up" : "sign-in";
+
+  if (awaitingEmail) {
+    return (
+      <AwaitingConfirmation
+        email={awaitingEmail}
+        password={password}
+        onBack={() => {
+          setAwaitingEmail(null);
+          setMode("sign-in");
+          setError(null);
+          setInfo(null);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-[26px]">
