@@ -1,13 +1,13 @@
-<!-- PR courte. Merge dans les 1-2h. main doit rester déployable. -->
+<!-- Short PR. Merge within 1-2h. main must stay deployable. -->
 
-**Lane** : L_ (Core / Backend / UI / Infra / Démo)
+**Lane**: L_ (Core / Backend / UI / Infra / Demo)
 
-**Ce que ça fait** (1-2 lignes) :
+**What it does** (1-2 lines):
 
-**Impact démo** : ça rend le chemin de démo plus [fiable / impressionnant / complet] parce que…
+**Demo impact**: it makes the demo path more [reliable / impressive / complete] because…
 
 **Checklist**
-- [ ] `pnpm check` passe en local (typecheck + lint + format)
-- [ ] Testé le chemin concerné à la main (screenshot/GIF si UI)
-- [ ] Ne casse pas la lane d'un·e autre (prévenu·e si zone partagée)
-- [ ] Pas de secret commité
+- [ ] `pnpm check` passes locally (typecheck + lint + format)
+- [ ] Manually tested the relevant path (screenshot/GIF if UI)
+- [ ] Doesn't break anyone else's lane (notified if shared area)
+- [ ] No committed secret

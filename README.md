@@ -3,62 +3,62 @@
 
 # 🏆 Mira — RAISE Hackathon 2026
 
-> Workspace de build, équipe de 5. Ship une démo qui **marche**. Submission **dimanche 12h00**.
-> Repo : `github.com/Cimeci/Mira` · Archi & moteur → `ARCHITECTURE.md` · Workflow équipe → `CONTRIBUTING.md` · Board → `TASKS.md`
+> Build workspace, team of 5. Ship a demo that **works**. Submission **Sunday 12:00**.
+> Repo: `github.com/Cimeci/Mira` · Architecture & engine → `ARCHITECTURE.md` · Team workflow → `CONTRIBUTING.md` · Board → `TASKS.md`
 
-**Une grande partie du code se fait avec Claude Code** (pas obligatoire). Si tu l'utilises : ouvre-le dans ce dossier, il lit `CLAUDE.md` automatiquement et connaît d'entrée toutes les règles, le workflow git et le standard de code. Dis-lui juste ta lane (Core/Backend/UI/Infra/Démo). Les mêmes règles s'appliquent si tu codes à la main.
+**A large share of the code is written with Claude Code** (not mandatory). If you use it: open it in this folder, it reads `CLAUDE.md` automatically and knows every rule, the git workflow and the coding standard from the start. Just tell it your lane (Core/Backend/UI/Infra/Demo). The same rules apply if you code by hand.
 
-## ▶️ Lancer le squelette (tourne sur la stdlib, zéro install)
+## ▶️ Run the skeleton (runs on the stdlib, zero install)
 ```bash
-python3.11 -m mira.demo      # joue les 3 beats de démo (tout mocké)
-# ou, environnement complet :
+python3.11 -m mira.demo      # plays the 3 demo beats (all mocked)
+# or, full environment:
 bash setup.sh && source .venv/bin/activate
 python -m mira.demo ; pytest -q ; ruff check .
 ```
 
-## 🚀 Tout lancer en local (une commande)
+## 🚀 Run everything locally (one command)
 ```bash
-bash dev.sh                  # API pipeline :8000 · locator CU :8001 · face-verifier :3001
+bash dev.sh                  # pipeline API :8000 · locator CU :8001 · face-verifier :3001
 ```
-Ctrl+C arrête tout. Ports surchargeables via `MIRA_API_PORT` / `MIRA_WEB_PORT` /
-`FACE_VERIFIER_PORT`. Le face-verifier (Node) n'est démarré que si
-`services/face-verifier/node_modules` existe (`cd services/face-verifier && npm install`).
-Le pipeline `Mandate → Locate → Analyze → Notify` tourne end-to-end avec des **mocks**. Chaque lane remplace le mock de son stage par le vrai, derrière les interfaces gelées de `mira/types.py`. Guardrails Mira dans `CLAUDE.md`.
+Ctrl+C stops everything. Ports overridable via `MIRA_API_PORT` / `MIRA_WEB_PORT` /
+`FACE_VERIFIER_PORT`. The (Node) face-verifier only starts if
+`services/face-verifier/node_modules` exists (`cd services/face-verifier && npm install`).
+The `Mandate → Locate → Analyze → Notify` pipeline runs end-to-end on **mocks**. Each lane swaps its stage's mock for the real thing, behind the frozen interfaces in `mira/types.py`. Mira guardrails in `CLAUDE.md`.
 
-## ⏱️ Timeline (4–5 juil, venue ferme 22h sam / rouvre 7h dim)
+## ⏱️ Timeline (Jul 4–5, venue closes 22:00 Sat / reopens 07:00 Sun)
 
-| Bloc | Objectif |
+| Block | Goal |
 |------|----------|
-| **Sam matin (dès 8h30)** | Choisir track + problem statement · lock l'idée · scaffold + 1er déploiement Vercel vide |
-| **Sam aprem** | **Vertical slice end-to-end qui tourne** (le chemin de démo). Rien d'autre ne compte tant que ça ne marche pas. |
-| **Sam soir (hors site)** | Élargir la démo · brancher la stack sponsor à fond · fiabiliser |
-| **Dim matin** | Freeze features 10h. Polish démo · enregistrer **vidéo 1 min** · répéter pitch 3 min |
-| **Dim 12h00** | **SUBMIT** (form + vidéo + repo public) |
+| **Sat morning (from 8:30)** | Pick track + problem statement · lock the idea · scaffold + first empty Vercel deploy |
+| **Sat afternoon** | **Working end-to-end vertical slice** (the demo path). Nothing else counts until this works. |
+| **Sat evening (off-site)** | Widen the demo · wire the sponsor stack fully · harden |
+| **Sun morning** | Feature freeze at 10:00. Polish demo · record **1-min video** · rehearse 3-min pitch |
+| **Sun 12:00** | **SUBMIT** (form + video + public repo) |
 
-## ✅ Checklist submission
-- [ ] Repo **public** + **LICENSE MIT** (déjà en place)
-- [ ] Démo live déployée (Vercel preview URL) qui tourne sans toi
-- [ ] Vidéo 1 min (Loom/YT) — montre le résultat, pas le code
-- [ ] Pitch 3 min prêt : problème → démo → pourquoi ça claque sur la stack sponsor
-- [ ] Formulaire de soumission rempli
-- [ ] README repo : quoi + comment lancer + quelle stack sponsor
+## ✅ Submission checklist
+- [ ] **Public** repo + **MIT LICENSE** (already in place)
+- [ ] Deployed live demo (Vercel preview URL) that runs without you
+- [ ] 1-min video (Loom/YT) — show the result, not the code
+- [ ] 3-min pitch ready: problem → demo → why it lands on the sponsor stack
+- [ ] Submission form filled in
+- [ ] Repo README: what + how to run + which sponsor stack
 
-## 🖥️ Frontend (surface victime, Next.js)
+## 🖥️ Frontend (victim-facing surface, Next.js)
 ```bash
 cd frontend && npm install && npm run dev   # http://localhost:3000
 ```
-Landing → start → actions → mandat → signature faciale → case. Détails : `frontend/README.md`.
+Landing → start → actions → mandate → facial signature → case. Details: `frontend/README.md`.
 
-## 📌 Statut projet
-- **Track** : Safety, Compliance & Agentic AI
-- **Idée** : Mira — agent assistif *consent-first* qui aide une victime de deepfake sexuel non consenti à en obtenir le retrait sous droit EU (RGPD/DSA/loi SREN).
-- **Pipeline** : Mandate → Locate → Analyze → Notify (consent unlocks autonomy).
-- **Chemin de démo (3 beats)** : (1) pas de mandat → l'agent refuse · (2) pipeline complet → notice DSA dans l'inbox · (3) flag mineur → halt + escalade, zéro stockage.
-- **Surface démo** : Next.js (`frontend/`) + FastAPI SSE (`mira/api.py`)
-- **URL démo** : _TBD_
+## 📌 Project status
+- **Track**: Safety, Compliance & Agentic AI
+- **Idea**: Mira — a *consent-first* assistive agent that helps a victim of non-consensual sexual deepfakes get them taken down under EU law (GDPR/DSA/SREN law).
+- **Pipeline**: Mandate → Locate → Analyze → Notify (consent unlocks autonomy).
+- **Demo path (3 beats)**: (1) no mandate → the agent refuses · (2) full pipeline → DSA notice in the inbox · (3) minor flag → halt + escalate, zero storage.
+- **Demo surface**: Next.js (`frontend/`) + FastAPI SSE (`mira/api.py`)
+- **Demo URL**: _TBD_
 
-## 🚫 Rappels qui disqualifient
-NEW WORK ONLY (zéro Softcallia/code existant) · 100% OSS/MIT · pas de RAG basique / Streamlit / image analyzer / chatbot générique / CV screener / conseil médical.
+## 🚫 Disqualifying reminders
+NEW WORK ONLY (zero Softcallia/pre-existing code) · 100% OSS/MIT · no basic RAG / Streamlit / image analyzer / generic chatbot / CV screener / medical advice.
 
-→ Architecture technique (agents + computer use Gemini + infra + légal) : `ARCHITECTURE.md`
-→ Détails orga + playbook skills : `CHEATSHEET.md`
+→ Technical architecture (agents + Gemini computer use + infra + legal): `ARCHITECTURE.md`
+→ Ops details + skills playbook: `CHEATSHEET.md`
