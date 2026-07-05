@@ -23,6 +23,10 @@ mira/web/static/shots/
 # Plan de travail perso (non commité — cf. en-tête du fichier)
 PLAN.local.md
 
+# Artefacts de dev (logs dev.sh, cache incrémental TS)
+.dev-logs/
+*.tsbuildinfo
+
 # Local runtime env (secrets) — never committed
 dev.env
 

@@ -8,15 +8,46 @@ vierge. C'est le pattern « réutilise une session authentifiée » des agents w
 
 from __future__ import annotations
 
+import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from dotenv import dotenv_values
 from playwright.async_api import Page, Playwright, Route
 
 from . import guard
 from .actions import VIEWPORT
 
 PROFILE_DIR = Path(".mira_browser_profile")
+_ENV_FILE = ".env.local"
+# En mode visible, on ralentit chaque geste : sans ça l'agent clique/scrolle trop
+# vite pour qu'on puisse suivre à l'œil « ce qu'il fait » pendant le tracking.
+_HEADED_SLOWMO_MS = 250
+
+
+def _env(name: str) -> str | None:
+    """Lit une variable d'env, puis à défaut dans `.env.local` (même source que la
+    clé API) — le toggle marche donc qu'on l'exporte au shell ou qu'on le pose dans
+    le fichier d'env local."""
+    return os.getenv(name) or dotenv_values(_ENV_FILE).get(name)
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _launch_kwargs() -> dict:
+    """Options de lancement Playwright. Défaut = headless (serveur/démo, Cloud Run).
+    `MIRA_HEADED=1` ouvre une vraie fenêtre pour suivre l'agent à l'œil ;
+    `MIRA_CU_SLOWMO` (ms) force la vitesse des gestes."""
+    headed = _truthy(_env("MIRA_HEADED"))
+    slowmo_raw = _env("MIRA_CU_SLOWMO")
+    slow_mo = (
+        int(slowmo_raw)
+        if slowmo_raw and slowmo_raw.isdigit()
+        else (_HEADED_SLOWMO_MS if headed else 0)
+    )
+    return {"headless": not headed, "slow_mo": slow_mo}
 
 
 async def _abort_out_of_scope(route: Route) -> None:
@@ -41,12 +72,12 @@ async def open_page(pw: Playwright) -> tuple[Page, Callable[[], Awaitable[None]]
     """
     if PROFILE_DIR.is_dir():
         context = await pw.chromium.launch_persistent_context(
-            str(PROFILE_DIR), headless=True, viewport=VIEWPORT
+            str(PROFILE_DIR), viewport=VIEWPORT, **_launch_kwargs()
         )
         page = context.pages[0] if context.pages else await context.new_page()
         await page.route("**/*", _abort_out_of_scope)
         return page, context.close
-    browser = await pw.chromium.launch(headless=True)
+    browser = await pw.chromium.launch(**_launch_kwargs())
     page = await browser.new_page(viewport=VIEWPORT)
     await page.route("**/*", _abort_out_of_scope)
     return page, browser.close

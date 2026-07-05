@@ -3,10 +3,16 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 /** Small clickable wordmark used in the inner-screen header bar (→ home). */
-export function Logo({ className }: { className?: string }) {
+export function Logo({
+  className,
+  href = "/",
+}: {
+  className?: string;
+  href?: string;
+}) {
   return (
     <Link
-      href="/"
+      href={href}
       aria-label="mira — home"
       className={cn("inline-block", className)}
     >

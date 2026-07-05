@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Silkscreen, IBM_Plex_Mono } from "next/font/google";
 import { FlowProvider } from "@/lib/flow-context";
+import { SessionProvider } from "@/lib/session-context";
 import "./globals.css";
 
 const silkscreen = Silkscreen({
@@ -31,7 +32,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${silkscreen.variable} ${plexMono.variable}`}>
       <body className="min-h-screen bg-mira-void-deep font-mono text-mira-luminance antialiased">
-        <FlowProvider>{children}</FlowProvider>
+        <SessionProvider>
+          <FlowProvider>{children}</FlowProvider>
+        </SessionProvider>
       </body>
     </html>
   );

@@ -21,9 +21,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -38,6 +41,20 @@ _SHOTS = _BASE / "static" / "shots"
 _SHOTS.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Mira — Locator (Computer Use)")
+
+# CORS : le dashboard (L3, ex. Next.js :3000) ouvre le flux SSE /stream en direct
+# (EventSource cross-origin) — le proxy Next bufferisait le flux, le direct stream
+# frame par frame. Même politique que mira/api : permissif par défaut (dev/démo),
+# restreignable via MIRA_CORS_ORIGINS. Pas de cookie ici -> credentials désactivé.
+_origins = os.getenv("MIRA_CORS_ORIGINS", "*").strip()
+_cors_origins = ["*"] if _origins == "*" else [o.strip() for o in _origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 templates = Jinja2Templates(directory=str(_BASE / "templates"))
 app.mount("/static", StaticFiles(directory=str(_BASE / "static")), name="static")
 app.mount("/mockhost", StaticFiles(directory=str(_MOCKHOST), html=True), name="mockhost")
@@ -82,6 +99,46 @@ async def live(request: Request, url: str) -> HTMLResponse:
     return templates.TemplateResponse(request, "live.html", {"url": url})
 
 
+def _format_event(ev: dict) -> str | None:
+    """Une ligne de trace lisible par event du crawl — None = ignoré (frames)."""
+    t = ev.get("type")
+    if t == "crawl_start":
+        lim = ev.get("limits", {})
+        return f"▸ crawl {ev.get('url')} · max {lim.get('pages')} pages / depth {lim.get('depth')}"
+    if t == "page":
+        return f"→ page {ev.get('n')}/{ev.get('total')} (depth {ev.get('depth')}) {ev.get('url')}"
+    if t == "action":
+        return f"🖱 {ev.get('name')} {ev.get('args')}"
+    if t == "reasoning":
+        return f"🧠 {ev.get('text', '')[:140]}"
+    if t == "safety":
+        return f"🔒 action sensible : {ev.get('action')} — {ev.get('text')}"
+    if t == "note":
+        return f"· {ev.get('text')}"
+    if t == "images":
+        return f"🖼 +{ev.get('new')} images (total {ev.get('total')})"
+    if t == "links":
+        return f"🔗 {ev.get('found')} liens, {ev.get('queued')} mis en file"
+    if t == "done":
+        return (
+            f"✅ done · {ev.get('count')} images · "
+            f"{ev.get('pages')} pages · {ev.get('elapsed')}s"
+        )
+    if t == "error":
+        return f"⚠️ {ev.get('message')}"
+    return None
+
+
+def _log_event(ev: dict) -> None:
+    """Trace serveur du crawl (→ .dev-logs/web.log) pour suivre où va l'agent en
+    parallèle du live view. On saute les frames (images base64, illisibles en log)."""
+    if ev.get("type") == "frame":
+        return
+    line = _format_event(ev)
+    if line:
+        print(f"[cu] {line}", file=sys.stderr, flush=True)
+
+
 @app.get("/stream")
 async def stream(url: str) -> StreamingResponse:
     """Flux SSE du crawler agentique : l'agent explore une surface bornée, suit les
@@ -91,9 +148,11 @@ async def stream(url: str) -> StreamingResponse:
     async def _events():
         try:
             async for event in generator:
+                _log_event(event)
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:  # noqa: BLE001 — toute erreur devient un event SSE
             payload = {"type": "error", "message": f"{type(exc).__name__}: {exc}"}
+            _log_event(payload)
             yield f"data: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(_events(), media_type="text/event-stream")

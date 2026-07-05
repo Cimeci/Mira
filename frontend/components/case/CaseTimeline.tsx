@@ -1,7 +1,17 @@
 import { Fragment } from "react";
 import { cn } from "@/lib/cn";
 
-const STEPS: { label: string; note?: string; active?: boolean }[] = [
+export type TimelineStep = {
+  label: string;
+  note?: string;
+  /** Currently running step (pulsing marker). */
+  active?: boolean;
+  /** Already-passed step (solid marker). */
+  done?: boolean;
+};
+
+/** The standard six-step case timeline (first step in progress, rest awaiting). */
+export const DEFAULT_TIMELINE_STEPS: TimelineStep[] = [
   { label: "collect evidence", active: true },
   { label: "verify match" },
   { label: "send platform report", note: "(if chosen)" },
@@ -11,14 +21,18 @@ const STEPS: { label: string; note?: string; active?: boolean }[] = [
 ];
 
 /** Vertical case timeline: first step in progress, the rest awaiting. */
-export function CaseTimeline() {
+export function CaseTimeline({
+  steps = DEFAULT_TIMELINE_STEPS,
+}: {
+  steps?: TimelineStep[];
+}) {
   return (
     <div className="flex flex-1 flex-col rounded-chip border border-[rgba(181,107,255,0.35)] bg-mira-night p-7">
       <div className="mb-[18px] text-label uppercase tracking-label text-mira-muted-text">
         case timeline
       </div>
 
-      {STEPS.map((step, i) => (
+      {steps.map((step, i) => (
         <Fragment key={step.label}>
           <div className="flex items-center gap-[14px]">
             <div
@@ -26,13 +40,19 @@ export function CaseTimeline() {
                 "h-[14px] w-[14px] flex-shrink-0 rounded-full box-border",
                 step.active
                   ? "animate-pulse bg-mira-electric-lilac shadow-[0_0_10px_rgba(181,107,255,0.8)]"
-                  : "border border-[rgba(181,107,255,0.55)] bg-mira-purple-steel"
+                  : step.done
+                    ? "bg-mira-electric-lilac shadow-[0_0_6px_rgba(181,107,255,0.45)]"
+                    : "border border-[rgba(181,107,255,0.55)] bg-mira-purple-steel"
               )}
             />
             <div
               className={cn(
                 "text-[15px]",
-                step.active ? "text-mira-luminance" : "text-mira-muted-text"
+                step.active
+                  ? "text-mira-luminance"
+                  : step.done
+                    ? "text-mira-lilac-glow"
+                    : "text-mira-muted-text"
               )}
             >
               {step.label}
@@ -42,16 +62,19 @@ export function CaseTimeline() {
                   — in progress
                 </span>
               )}
-              {step.note && (
+              {step.done && (
+                <span className="text-body-sm text-mira-muted-dim"> — done</span>
+              )}
+              {step.note && !step.done && (
                 <span className="text-body-sm text-mira-muted-dim"> {step.note}</span>
               )}
             </div>
           </div>
-          {i < STEPS.length - 1 && (
+          {i < steps.length - 1 && (
             <div
               className={cn(
                 "ml-[6.5px] h-[22px] w-px",
-                i === 0
+                steps[i].active || steps[i].done
                   ? "bg-[rgba(181,107,255,0.6)]"
                   : "bg-[rgba(181,107,255,0.25)]"
               )}

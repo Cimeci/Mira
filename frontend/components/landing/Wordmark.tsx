@@ -3,7 +3,7 @@ import Image from "next/image";
 /** Landing brand lockup: wordmark above the breathing pixel eye. */
 export function Wordmark() {
   return (
-    <div className="relative mt-16 flex flex-col items-center gap-1">
+    <div className="relative flex flex-col items-center gap-1">
       <Image
         src="/assets/logo_txt.png"
         alt="mira"
@@ -18,7 +18,7 @@ export function Wordmark() {
         width={340}
         height={200}
         priority
-        className="mt-[72px] block w-[min(340px,72vw)] animate-shine [filter:drop-shadow(0_0_16px_rgba(181,107,255,0.5))]"
+        className="mt-12 block w-[min(340px,72vw)] animate-shine [filter:drop-shadow(0_0_16px_rgba(181,107,255,0.5))]"
       />
     </div>
   );

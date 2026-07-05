@@ -9,10 +9,16 @@ Joue les 3 beats de démo du premortem :
 from __future__ import annotations
 
 import asyncio
+import os
 
-from . import mandate as mandate_mod
-from .orchestrator import ConsentError, run
-from .types import Status
+# Démo CLI = 100% mock, aucun réseau (docstring). Posé AVANT tout import du locator :
+# le beat 3 (mineur suspecté) ne doit JAMAIS déclencher un crawl réel (G-6), et le
+# skeleton stdlib doit tourner sans Playwright ni clé. Verrouillé ici, pas hérité de l'env.
+os.environ["MIRA_LOCATOR_MODE"] = "mock"
+
+from . import mandate as mandate_mod  # noqa: E402
+from .orchestrator import ConsentError, run  # noqa: E402
+from .types import Status  # noqa: E402
 
 
 def _banner(title: str) -> None:
