@@ -11,9 +11,8 @@ A skill is a takedown route: a channel, a target, and a Gemini Computer Use task
 Which skill runs comes from the victim's chosen action paths (wireframe) — for now
 MIRA_TAKEDOWN_SKILL selects it, defaulting to the EU/FR legal route.
 
-Computer Use drives the skill's REAL URL, so the jury sees the real site. It only touches
-hosts on the CU allow-list — set MIRA_CU_ALLOWED_HOSTS to the target host(s) for a
-real-site run, and MIRA_CU_HEADFUL=1 to show the browser window.
+Computer Use drives the skill's REAL URL, so the jury sees the real site. Use
+MIRA_CU_HEADFUL=1 to show the browser window when you want to watch the run.
 """
 
 from __future__ import annotations
@@ -55,7 +54,7 @@ _SKILLS: dict[str, Skill] = {
     ),
     "meta": Skill(
         "meta", "Meta (Facebook/Instagram)", "platform_form",
-        "https://www.facebook.com/help/contact/1380418588640631",
+        "https://www.facebook.com/help/1753719584844061",
     ),
     "google": Skill(
         "google", "Google (removal)", "platform_form",

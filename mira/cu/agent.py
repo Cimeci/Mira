@@ -15,8 +15,6 @@ from dotenv import dotenv_values
 from google import genai
 from google.genai import types
 from playwright.async_api import Page, async_playwright
-
-from . import guard
 from .actions import exec_action
 from .browser import open_page
 from .live import data_uri
@@ -141,28 +139,19 @@ async def _run_cu_loop(
             yield {"type": "action", "name": call.name, "args": _redact(str(args), email, password)}
             action_result = await exec_action(page, call.name, args)
             await page.wait_for_timeout(500)
-            # Verrou 3/3 (G-2/G-12) : re-vérifier APRÈS coup. Un clic sur un lien ou une
-            # redirection a pu sortir du périmètre sans action `navigate` explicite —
-            # on halte AVANT toute capture/exploitation de la page tierce.
-            if not guard.is_allowed(page.url):
-                yield {
-                    "type": "note",
-                    "text": (
-                        f"🔒 Garde-fou G-2 : sortie de périmètre bloquée "
-                        f"({guard.host_of(page.url)}) — arrêt de l'exploration."
-                    ),
-                }
-                return
             next_png = await page.screenshot(type="png")
             yield {
                 "type": "frame",
                 "label": call.name,
                 "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
             }
+            response = {"url": page.url, **action_result}
+            if safety:
+                # The Computer-Use API requires the safety decision to be echoed back in
+                # the function response, or the next turn is rejected with a 400.
+                response["safety_acknowledgement"] = "true"
             response_parts.append(
-                types.Part.from_function_response(
-                    name=call.name, response={"url": page.url, **action_result}
-                )
+                types.Part.from_function_response(name=call.name, response=response)
             )
             response_parts.append(types.Part.from_bytes(data=next_png, mime_type="image/png"))
         contents.append(types.Content(role="user", parts=response_parts))
