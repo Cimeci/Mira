@@ -115,6 +115,7 @@ def capture_consent(
     scope_urls: list[str],
     legal_basis: str = DEFAULT_LEGAL_BASIS,
     attestation: bool,
+    action_paths: list[str] | None = None,
 ) -> Mandate:
     """Fabrique LE mandat : consentement explicite requis, rôle et scope validés (fail-fast).
 
@@ -138,6 +139,7 @@ def capture_consent(
         scope_urls=scope_urls,
         legal_basis=legal_basis,
         active=True,
+        action_paths=action_paths or [],
     )
     # G-5 : la preuve de consentement est signée et persistée hors du repo committable.
     mandate.consent_artifact = _write_consent_artifact(mandate)
