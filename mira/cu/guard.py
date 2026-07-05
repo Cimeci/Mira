@@ -19,8 +19,11 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
-# Défaut = mock host servi localement par mira/web (G-12). JAMAIS de host public ici.
+# Défaut verrouillé (G-12) = surface de démo locale uniquement. On OUVRE le web
+# entier explicitement avec MIRA_CU_ALLOWED_HOSTS="*" (choix conscient) ; sinon on
+# reste sur cette allow-list. JAMAIS de host public codé en dur ici.
 _DEFAULT_ALLOWED = "localhost,127.0.0.1"
+_OPEN_WEB = "*"
 
 
 class OutOfScopeError(ValueError):
@@ -28,9 +31,25 @@ class OutOfScopeError(ValueError):
     captée par les surfaces qui transforment déjà ValueError en event/erreur propre."""
 
 
+def _raw_allowlist() -> str:
+    """Valeur brute de l'allow-list (env), relue à chaque appel — testable, et le
+    périmètre peut changer sans redémarrer. Source = os.environ (pas .env.local) :
+    c'est une politique de périmètre, pas un secret ; on la pose au shell / dev.sh."""
+    return os.getenv("MIRA_CU_ALLOWED_HOSTS", _DEFAULT_ALLOWED)
+
+
+def is_open_web() -> bool:
+    """True si le périmètre est explicitement ouvert au web entier
+    (MIRA_CU_ALLOWED_HOSTS="*"). Assouplissement CONSCIENT de G-2/G-12 : le Locator
+    peut alors atteindre n'importe quel host — c'est un opt-in, jamais le défaut."""
+    return _raw_allowlist().strip() == _OPEN_WEB
+
+
 def allowed_hosts() -> frozenset[str]:
-    """Allow-list courante, relue à chaque appel (testable, surchargée par l'env)."""
-    raw = os.getenv("MIRA_CU_ALLOWED_HOSTS", _DEFAULT_ALLOWED)
+    """Allow-list de hosts courante. Vide en mode open-web (cf. is_open_web)."""
+    raw = _raw_allowlist()
+    if raw.strip() == _OPEN_WEB:
+        return frozenset()
     return frozenset(h.strip().lower() for h in raw.split(",") if h.strip())
 
 
@@ -40,8 +59,11 @@ def host_of(url: str) -> str:
 
 
 def is_allowed(url: str) -> bool:
-    """True si le host de `url` est dans l'allow-list. Compare le host seul :
-    un port ou un chemin ne relâche jamais la frontière."""
+    """En mode open-web ("*"), tout host http(s) valide passe. Sinon, le host de
+    `url` doit être dans l'allow-list — comparé seul : ni port ni chemin ne relâchent
+    la frontière."""
+    if is_open_web():
+        return bool(host_of(url))
     return host_of(url) in allowed_hosts()
 
 
@@ -49,7 +71,7 @@ def require_allowed(url: str) -> None:
     """Lève OutOfScopeError si `url` sort du périmètre. Point d'application unique."""
     if not is_allowed(url):
         raise OutOfScopeError(
-            f"cible hors périmètre démo (G-2/G-12) : {host_of(url) or url!r} — "
-            f"hosts autorisés : {', '.join(sorted(allowed_hosts()))} "
-            "(étendre via MIRA_CU_ALLOWED_HOSTS)"
+            f"cible hors périmètre (G-2/G-12) : {host_of(url) or url!r} — "
+            f"hosts autorisés : {', '.join(sorted(allowed_hosts())) or '(aucun)'} "
+            "(étendre via MIRA_CU_ALLOWED_HOSTS, ou '*' pour ouvrir le web entier)"
         )

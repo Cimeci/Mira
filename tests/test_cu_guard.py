@@ -40,6 +40,20 @@ def test_allowlist_extended_only_by_explicit_env(monkeypatch):
     assert not guard.is_allowed("http://127.0.0.1/x")  # remplacé, pas ajouté
 
 
+def test_open_web_mode_allows_any_host(monkeypatch):
+    """MIRA_CU_ALLOWED_HOSTS='*' = périmètre ouvert au web (opt-in conscient) : tout
+    host http(s) passe, à l'entrée (_validate_url) comme à l'action navigate."""
+    monkeypatch.setenv("MIRA_CU_ALLOWED_HOSTS", "*")
+    assert guard.is_open_web()
+    assert guard.is_allowed("https://x.com/victim")
+    assert guard.is_allowed("https://instagram.com/p/abc")
+    _validate_url("https://vrai-site.example/x")  # ne lève plus
+    page = _FakePage()
+    result = asyncio.run(exec_action(page, "navigate", {"url": "https://x.com/victim"}))
+    assert result["status"] == "ok"
+    assert page.goto_calls == ["https://x.com/victim"]
+
+
 def test_require_allowed_raises_out_of_scope():
     with pytest.raises(guard.OutOfScopeError):
         guard.require_allowed("https://x.com/victim")
