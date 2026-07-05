@@ -45,6 +45,7 @@ import re
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
@@ -94,6 +95,7 @@ class CaseRun:
     """
 
     case_id: str
+    created_at: str = ""  # ISO-8601 UTC, posé à la création (tri dashboard).
     history: list[dict] = field(default_factory=list)
     subscribers: set[asyncio.Queue] = field(default_factory=set)
     confirmations: dict[str, asyncio.Future[bool]] = field(default_factory=dict)
@@ -287,7 +289,7 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
     if case_id in _RUNS:
         raise HTTPException(status_code=409, detail=f"case_id déjà utilisé : {case_id}")
     mandate = _build_mandate(req, case_id)
-    run = CaseRun(case_id=case_id)
+    run = CaseRun(case_id=case_id, created_at=datetime.now(timezone.utc).isoformat())
     _RUNS[case_id] = run
     store.case_created(mandate)
     task = asyncio.create_task(_run_pipeline(run, mandate))
@@ -299,6 +301,23 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
         "events_url": f"/cases/{case_id}/events",
         "confirm_url": f"/cases/{case_id}/confirm",
     }
+
+
+@app.get("/cases")
+async def list_cases() -> dict[str, list[dict]]:
+    """Liste tous les cases — pour le dashboard victime."""
+    cases = []
+    for run in _RUNS.values():
+        cases.append({
+            "case_id": run.case_id,
+            "finished": run.finished,
+            "current_status": run.last_status,
+            "statuses": run.statuses,
+            "created_at": run.created_at or None,
+        })
+    # Trier par plus récent en premier
+    cases.sort(key=lambda c: c.get("created_at") or "", reverse=True)
+    return {"cases": cases}
 
 
 @app.get("/cases/{case_id}")

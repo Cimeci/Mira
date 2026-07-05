@@ -8,8 +8,17 @@ type Scan = ReturnType<typeof useFaceScan>;
 /** Fullscreen KYC face-scan modal. Purely presentational — driven by useFaceScan. */
 export function FaceScanModal({ scan }: { scan: Scan }) {
   const { phase, modalIn, flash, derived, refs, cancel, retry } = scan;
-  const { show, ticks, litCount, instruction, procBlocks, modalTitle, lensRing } =
-    derived;
+  const {
+    show,
+    ticks,
+    litCount,
+    instruction,
+    deniedMessage,
+    demoLive,
+    procBlocks,
+    modalTitle,
+    lensRing,
+  } = derived;
 
   if (!show.modal) return null;
 
@@ -70,6 +79,20 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
                 className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
                 style={{ display: show.frozen ? "block" : "none" }}
               />
+              {(show.video || demoLive) && (
+                <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2">
+                  {show.video ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(140,255,190,0.5)] bg-mira-void/80 px-2.5 py-1 text-[10px] uppercase tracking-label text-mira-success backdrop-blur">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mira-success" />
+                      live
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(255,198,92,0.5)] bg-mira-void/80 px-2.5 py-1 text-[10px] uppercase tracking-label text-mira-warn backdrop-blur">
+                      demo · no camera
+                    </span>
+                  )}
+                </div>
+              )}
               {show.eye && (
                 <div className="flex animate-softpulse flex-col items-center">
                   <Image
@@ -82,8 +105,8 @@ export function FaceScanModal({ scan }: { scan: Scan }) {
                 </div>
               )}
               {show.denied && (
-                <div className="px-9 text-center text-caption leading-[1.5] text-mira-muted-text">
-                  camera access is needed. nothing is uploaded.
+                <div className="px-6 text-center text-caption leading-[1.5] text-mira-muted-text">
+                  {deniedMessage}
                 </div>
               )}
               {show.oval && (

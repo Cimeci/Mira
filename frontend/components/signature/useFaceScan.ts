@@ -13,6 +13,21 @@ export type ScanPhase =
   | "processing"
   | "done";
 
+/**
+ * Why the "denied" screen is showing — drives the message + guidance so the
+ * user knows whether to re-allow the permission, switch to a secure URL, or
+ * change browser. Empty string means "not denied".
+ */
+export type DenyReason = "" | "denied" | "insecure" | "unsupported";
+
+/**
+ * Deterministic demo switch for a machine with no webcam (projector, judging
+ * booth). Set NEXT_PUBLIC_FACE_DEMO=1 to force the scan to play its scripted
+ * animation without ever calling getUserMedia — the auto-fallback below only
+ * catches sandboxed iframes, not "no camera hardware".
+ */
+const FORCE_DEMO = process.env.NEXT_PUBLIC_FACE_DEMO === "1";
+
 const TICK_COUNT = 48;
 const PROC_BLOCKS = 20;
 const PROC_STATUS = [
@@ -42,6 +57,7 @@ export function useFaceScan(onComplete: () => void) {
   const [procStage, setProcStage] = useState(0);
   const [demo, setDemo] = useState(false);
   const [frozenSrc, setFrozenSrc] = useState("");
+  const [denyReason, setDenyReason] = useState<DenyReason>("");
 
   const video = useRef<HTMLVideoElement | null>(null);
   const frozenImg = useRef<HTMLImageElement | null>(null);
@@ -186,28 +202,48 @@ export function useFaceScan(onComplete: () => void) {
 
   const startCamera = useCallback(async () => {
     setPhase("requesting");
+    setDenyReason("");
+    if (FORCE_DEMO) {
+      setDemo(true);
+      beginPosition();
+      return;
+    }
+    // getUserMedia only exists on a secure context (https or localhost/
+    // 127.0.0.1). Reaching the dev server through a LAN IP over http leaves
+    // navigator.mediaDevices undefined, so the browser NEVER prompts — surface
+    // that explicitly instead of a misleading "access denied".
+    const media =
+      typeof navigator !== "undefined" ? navigator.mediaDevices : undefined;
+    if (!media || typeof media.getUserMedia !== "function") {
+      const secure =
+        typeof window !== "undefined" && window.isSecureContext;
+      setDenyReason(secure ? "unsupported" : "insecure");
+      setPhase("denied");
+      return;
+    }
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
-      });
+      const s = await media.getUserMedia({ video: { facingMode: "user" } });
       stream.current = s;
       setDemo(false);
       if (video.current) video.current.srcObject = s;
       beginPosition();
-    } catch {
-      let blocked = false;
-      try {
-        // @ts-expect-error featurePolicy is non-standard
-        blocked = document.featurePolicy && !document.featurePolicy.allowsFeature("camera");
-      } catch {
-        /* no-op */
-      }
-      if (blocked) {
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : "";
+      // No camera hardware (projector/booth) or the device is busy: play the
+      // scripted demo so the flow always completes. A real permission refusal
+      // (NotAllowedError / SecurityError) stays on the actionable "denied"
+      // screen — that's the one the user is expected to allow live.
+      if (
+        name === "NotFoundError" ||
+        name === "OverconstrainedError" ||
+        name === "NotReadableError"
+      ) {
         setDemo(true);
         beginPosition();
-      } else {
-        setPhase("denied");
+        return;
       }
+      setDenyReason("denied");
+      setPhase("denied");
     }
   }, [beginPosition]);
 
@@ -217,6 +253,7 @@ export function useFaceScan(onComplete: () => void) {
       reduced.current = prefersReducedMotion();
       frames.current = [];
       setPhase("requesting");
+      setDenyReason("");
       setModalIn(false);
       setSweepProg(0);
       setProc(0);
@@ -295,6 +332,15 @@ export function useFaceScan(onComplete: () => void) {
         } as Record<string, string>
       )[phase] || "";
 
+    // Message shown inside the lens when we land on "denied", tailored to the
+    // real cause so the user knows the actual next step.
+    const deniedMessage =
+      denyReason === "insecure"
+        ? "the camera needs a secure connection. open this page on http://localhost:3000 — not the ip address — or over https."
+        : denyReason === "unsupported"
+          ? "this browser can't reach the camera. try chrome or safari on a secure (https / localhost) connection."
+          : "camera access was blocked. click the camera icon in your browser's address bar to allow it, then try again. nothing is uploaded.";
+
     const demoLive = demo && ["position", "sweep", "frozen"].includes(phase);
 
     const procBlocks = Array.from({ length: PROC_BLOCKS }, (_, i) => {
@@ -309,6 +355,7 @@ export function useFaceScan(onComplete: () => void) {
       ticks,
       litCount,
       instruction,
+      deniedMessage,
       procBlocks,
       demoLive,
       modalTitle: ["processing", "done"].includes(phase)
@@ -334,7 +381,17 @@ export function useFaceScan(onComplete: () => void) {
         ? "0 0 0 3px rgba(140,255,190,0.5), 0 0 24px rgba(181,107,255,0.8)"
         : "0 0 18px rgba(107,47,165,0.35)",
     };
-  }, [phase, sweepProg, glowSweep, procStage, proc, demo, facePulse, frozenSrc]);
+  }, [
+    phase,
+    sweepProg,
+    glowSweep,
+    procStage,
+    proc,
+    demo,
+    facePulse,
+    frozenSrc,
+    denyReason,
+  ]);
 
   return {
     phase,

@@ -19,7 +19,9 @@ export function ScreenShell({
   footer,
   children,
 }: {
-  progress: { label: string; filled: number };
+  // Omit on non-flow surfaces (e.g. the cases dashboard): the 5-segment bar is
+  // an onboarding-flow indicator and is meaningless outside the linear flow.
+  progress?: { label: string; filled: number };
   contentWidth: number;
   centered?: boolean;
   footer: ReactNode;
@@ -32,18 +34,17 @@ export function ScreenShell({
       <GlowBackdrop />
       <Header />
 
-      <div
-        style={widthStyle}
-        className="mt-7 w-full px-5 sm:px-10 lg:px-0"
-      >
-        <ProgressBar label={progress.label} filled={progress.filled} />
-      </div>
+      {progress && (
+        <div style={widthStyle} className="mt-7 w-full px-5 sm:px-10 lg:px-0">
+          <ProgressBar label={progress.label} filled={progress.filled} />
+        </div>
+      )}
 
       <main
         style={widthStyle}
         className={cn(
           "relative w-full px-5 sm:px-10 lg:px-0",
-          centered ? "mt-auto" : "mt-7 mb-14"
+          centered ? "mt-auto" : "mb-14 mt-9"
         )}
       >
         {children}

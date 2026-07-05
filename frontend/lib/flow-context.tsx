@@ -21,6 +21,7 @@ export interface FlowState {
   actions: [boolean, boolean, boolean];
   mandateSigned: boolean;
   signatureStamp: string;
+  caseId: string; // real backend case id, once the flow opens one
 }
 
 interface FlowContextValue extends FlowState {
@@ -28,6 +29,7 @@ interface FlowContextValue extends FlowState {
   setDiscovery: (index: number) => void;
   setActions: (actions: [boolean, boolean, boolean]) => void;
   signMandate: (stamp: string) => void;
+  setCaseId: (id: string) => void;
 }
 
 const FlowContext = createContext<FlowContextValue | null>(null);
@@ -42,6 +44,7 @@ export function FlowProvider({ children }: { children: ReactNode }) {
   ]);
   const [mandateSigned, setMandateSigned] = useState(false);
   const [signatureStamp, setSignatureStamp] = useState("");
+  const [caseId, setCaseId] = useState("");
 
   const signMandate = useCallback((stamp: string) => {
     setMandateSigned(true);
@@ -55,12 +58,14 @@ export function FlowProvider({ children }: { children: ReactNode }) {
       actions,
       mandateSigned,
       signatureStamp,
+      caseId,
       setUrls,
       setDiscovery,
       setActions,
       signMandate,
+      setCaseId,
     }),
-    [urls, discovery, actions, mandateSigned, signatureStamp, signMandate]
+    [urls, discovery, actions, mandateSigned, signatureStamp, caseId, signMandate]
   );
 
   return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;
