@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Mock host — Signalement de contenu illicite (DSA art. 16)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin: .8rem 0 .2rem; font-weight: 600; }
+    input, textarea, select { width: 100%; padding: .5rem; font: inherit; box-sizing: border-box; }
+    .cb { font-weight: 400; margin-top: .8rem; }
+    .cb input { width: auto; }
+    button { margin-top: 1.2rem; padding: .6rem 1.2rem; font: inherit; cursor: pointer; }
+    #done { margin-top: 1rem; padding: 1rem; background: #e6ffed; border: 1px solid #7ee2a0; display: none; }
+  </style>
+</head>
+<body>
+  <h1>Signalement de contenu illicite</h1>
+  <p><em>Formulaire de démonstration (mock) — aucun envoi réel. Base : DSA art. 16.</em></p>
+  <form id="report-form">
+    <label for="url">URL du contenu</label>
+    <input id="url" name="url" type="url" placeholder="https://…" required>
+
+    <fieldset>
+      <legend>Catégorie</legend>
+      <label class="cb"><input type="radio" name="category" value="sexuel" required>
+        Contenu à caractère sexuel non consenti</label>
+      <label class="cb"><input type="radio" name="category" value="personne">
+        Atteinte à la personne</label>
+      <label class="cb"><input type="radio" name="category" value="autre">
+        Autre</label>
+    </fieldset>
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3" placeholder="Décrivez le contenu…" required></textarea>
+
+    <label for="email">E-mail du notifiant</label>
+    <input id="email" name="email" type="email" placeholder="notices@…" required>
+
+    <label class="cb"><input id="goodfaith" name="goodfaith" type="checkbox" required>
+      Je certifie de bonne foi l'exactitude de ce signalement.</label>
+
+    <button id="submit" type="submit">Envoyer le signalement</button>
+  </form>
+
+  <div id="done">✅ Signalement reçu — référence <b id="ref"></b></div>
+
+  <script>
+    document.getElementById("report-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      document.getElementById("ref").textContent =
+        "MOCK-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+      document.getElementById("report-form").style.display = "none";
+      document.getElementById("done").style.display = "block";
+    });
+  </script>
+</body>
+</html>
