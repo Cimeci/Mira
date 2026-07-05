@@ -25,6 +25,23 @@ FACE_PORT="${FACE_VERIFIER_PORT:-3001}"
 # « approve » renvoie 409. MIRA_DEMO_MODE=1 plancher le timeout à 15 min.
 export MIRA_DEMO_MODE="${MIRA_DEMO_MODE:-1}"
 
+# Périmètre du Locator Computer Use. Défaut ici = "*" (web ouvert) pour que l'agent
+# atteigne les VRAIES URLs soumises par la victime — assouplissement CONSCIENT de
+# G-2/G-12, assumé au lancement (pas caché dans le code : le défaut du code reste
+# verrouillé sur localhost). Re-verrouiller en listant des hosts avant `bash dev.sh`,
+# ex. MIRA_CU_ALLOWED_HOSTS="instagram.com,x.com" bash dev.sh
+export MIRA_CU_ALLOWED_HOSTS="${MIRA_CU_ALLOWED_HOSTS:-*}"
+
+# PROD par défaut (pas de mock) : le pipeline crawle RÉELLEMENT la cible.
+#   - MIRA_LOCATOR_MODE=cu : crawler agentique Gemini (Computer Use). Franchit les logins
+#     (le mock host présente un login JS) ET atteint les vraies URLs soumises par la
+#     victime. Nécessite GOOGLE_GENERATIVE_AI_API_KEY. "crawl" = Playwright pur, rapide
+#     mais bloqué par tout login JS (cibles de contenu direct seulement).
+#   - MIRA_DEMO_SCOPE_URL : cible par défaut si la victime ne soumet pas d'URL — le mock
+#     host SERVI par mira/web (G-12 : cible contrôlée, host 127.0.0.1 déjà allow-listé).
+export MIRA_LOCATOR_MODE="${MIRA_LOCATOR_MODE:-cu}"
+export MIRA_DEMO_SCOPE_URL="${MIRA_DEMO_SCOPE_URL:-http://127.0.0.1:$WEB_PORT/mockhost/}"
+
 START_FACE=0
 [ -d services/face-verifier/node_modules ] && START_FACE=1
 START_FRONTEND=0

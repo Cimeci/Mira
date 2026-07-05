@@ -38,7 +38,10 @@ def main() -> None:
     print("== Sightengine nudity-2.1 ==")
     nudity = safety.nudity_scores(image)
     print(json.dumps(nudity, indent=2))
-    print(f"explicitness={safety.explicitness(nudity):.3f}  is_explicit={safety.is_explicit(nudity)}")
+    print(
+        f"explicitness={safety.explicitness(nudity):.3f}  "
+        f"is_explicit={safety.is_explicit(nudity)}"
+    )
 
     print("\n== Grok intent ==")
     print(vision.ask_grok(image, prompts.load("nudity_intent")))

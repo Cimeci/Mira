@@ -25,6 +25,7 @@ if _envfile.exists():
             os.environ.setdefault(_key.strip(), _val.strip())
 
 from mira.providers.face_local import InsightFaceProvider  # noqa: E402
+
 from mira.vision import ask_gemini  # noqa: E402
 
 
