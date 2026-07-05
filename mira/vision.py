@@ -1,10 +1,16 @@
-"""Vision LLM helper (Gemini). Lazy-imports google-genai so importing this module
-costs nothing until a call is made. Send face-only crops here, never full bodies.
+"""Vision LLM helpers (Gemini + Grok).
+
+Send face-only crops here when identity isn't the point — only the face, never a nude
+body, leaves the system. Grok (xAI) is more permissive than Gemini on explicit-content
+classification, so it's the better tool for a nudity/intent check; Gemini often refuses.
 """
 
 from __future__ import annotations
 
+import base64
 import os
+
+import httpx
 
 
 def ask_gemini(
@@ -29,3 +35,37 @@ def ask_gemini(
         contents=[prompt, types.Part.from_bytes(data=image, mime_type=mime_type)],
     )
     return response.text or ""
+
+
+def ask_grok(
+    image: bytes,
+    prompt: str,
+    *,
+    model: str = "grok-4.3",  # xAI vision model; swap if your key exposes another
+    mime_type: str = "image/jpeg",
+) -> str:
+    """Ask xAI Grok about an image. OpenAI-compatible chat/completions with a base64
+    image; needs XAI_API_KEY (console.x.ai)."""
+    key = os.getenv("XAI_API_KEY")
+    if not key:
+        raise RuntimeError("XAI_API_KEY unset — set it in dev.env (console.x.ai)")
+    data_url = f"data:{mime_type};base64,{base64.b64encode(image).decode()}"
+    resp = httpx.post(
+        "https://api.x.ai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}"},
+        json={
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"] or ""

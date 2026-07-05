@@ -29,11 +29,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
+import os
 
 import httpx
 
-from . import face, store
+from . import face, prompts, safety, store, vision
 from .config import DEEPFAKE_SCORE_THRESHOLD
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, MediaItem, Status, utcnow
@@ -100,6 +102,51 @@ async def _face_match(item: MediaItem) -> tuple[bool, float | None]:
     faces = await asyncio.to_thread(face.embed_all, image)  # CPU-bound → off the loop
     distance = face.match_distance(reference, faces)
     return face.is_match(distance), face.similarity(distance)
+
+
+def _sightengine_configured() -> bool:
+    return bool(os.getenv("SIGHTENGINE_API_USER") and os.getenv("SIGHTENGINE_API_SECRET"))
+
+
+def _safety_configured() -> bool:
+    """True if EITHER the nudity classifier (Sightengine) OR the intent LLM (Grok) is set."""
+    return _sightengine_configured() or bool(os.getenv("XAI_API_KEY"))
+
+
+async def _assess_intent(image: bytes) -> dict | None:
+    """Best-effort intent verdict via Grok (JSON). None if XAI unset or anything fails —
+    intent annotates, it must never break the pipeline."""
+    if not os.getenv("XAI_API_KEY"):
+        return None
+    try:
+        raw = await asyncio.to_thread(vision.ask_grok, image, prompts.load("nudity_intent"))
+        return json.loads(raw)
+    except Exception:  # noqa: BLE001 - annotation only, never fatal
+        return None
+
+
+async def _phase_nudity_intent(item: MediaItem) -> tuple[bool, float | None, dict | None]:
+    """Phase 2.5 — content-safety gate. Proceeds if the image is explicit (Sightengine
+    nudity) OR shows abusive intent (Grok) — non-consensual harm isn't only nudity, a
+    humiliating/private non-nude image counts too. Returns (proceed, nudity_score,
+    intent). Pass-through (True, None, None) when neither classifier is configured or the
+    image is unfetchable."""
+    if not _safety_configured():
+        return True, None, None
+    image = await _fetch_candidate(item.url)
+    if image is None:
+        return True, None, None
+
+    score: float | None = None
+    explicit = False
+    if _sightengine_configured():
+        nudity = await asyncio.to_thread(safety.nudity_scores, image)
+        score = safety.explicitness(nudity)
+        explicit = safety.is_explicit(nudity)
+
+    intent = await _assess_intent(image)  # Grok; None if XAI unset or it fails
+    abusive = bool(intent and intent.get("abusive_intent"))
+    return (explicit or abusive), score, intent
 
 
 def _fetch_bytes(item: MediaItem) -> bytes:
@@ -207,6 +254,23 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
     face_score_txt = "n/a" if face_score is None else f"{face_score:.2f}"
     log(f"[ANALYZE] face-match: mandate face confirmed (score {face_score_txt})")
 
+    # Phase 2.5 — nudity gates (must be explicit intimate imagery), intent annotates.
+    # The scores are stored on the record even on rejection (audit + takedown context).
+    proceed, nudity_score, intent = await _phase_nudity_intent(item)
+    if not proceed:
+        emit(make_event(
+            item.case_id,
+            "analyzer",
+            Status.REJECTED,
+            from_status=Status.LOCATED,
+            detail="[ANALYZE] not harmful (no nudity, no abusive intent) -> REJECTED",
+            payload={"url": item.url, "reason": "not_harmful", "nudity_score": nudity_score},
+        ))
+        return _record(
+            item, score=0.0, phash="", sha="", status=Status.REJECTED,
+            nudity_score=nudity_score, intent=intent,
+        )
+
     # Phase 3 — score, still without bytes.
     score = await _phase_score(item)
     if score < DEEPFAKE_SCORE_THRESHOLD:
@@ -236,11 +300,21 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
         ),
         payload={"url": item.url, "score": score, "phash": phash, "sha256": sha},
     ))
-    return _record(item, score=score, phash=phash, sha=sha, status=Status.VERIFIED)
+    return _record(
+        item, score=score, phash=phash, sha=sha, status=Status.VERIFIED,
+        nudity_score=nudity_score, intent=intent,
+    )
 
 
 def _record(
-    item: MediaItem, *, score: float, phash: str, sha: str, status: Status
+    item: MediaItem,
+    *,
+    score: float,
+    phash: str,
+    sha: str,
+    status: Status,
+    nudity_score: float | None = None,
+    intent: dict | None = None,
 ) -> ForensicRecord:
     return ForensicRecord(
         case_id=item.case_id,
@@ -250,4 +324,6 @@ def _record(
         sha256_hash=sha,
         discovery_ts_utc=utcnow(),
         status=status,
+        nudity_score=nudity_score,
+        intent=intent,
     )

@@ -72,6 +72,8 @@ class ForensicRecord:
     discovery_ts_utc: datetime
     status: Status                    # VERIFIED | REJECTED | ESCALATED
     minimal_ref: Path | None = None   # chiffré, seulement si strictement requis
+    nudity_score: float | None = None  # Sightengine explicitness 0.0-1.0 (None if unchecked)
+    intent: dict | None = None         # Grok intent verdict {abusive_intent, confidence, reason}
 
 
 @dataclass
