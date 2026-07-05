@@ -22,6 +22,9 @@ playwright               # navigateur du scraper (puis: playwright install chrom
 google-genai             # Gemini Computer Use
 python-dotenv            # chargement .env.local
 
+# --- DB (lane L2) ---
+supabase                 # client Supabase (mira/db.py) — smoke : python -m mira.db
+
 # --- dev ---
 ruff
 pytest

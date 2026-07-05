@@ -3,6 +3,7 @@
 // the `canvas` native bindings for image decoding, which Edge cannot run.
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { NoFaceDetectedError, computeFaceDescriptor, isValidDescriptor } from "../lib/face.js";
+import { toImage } from "../lib/image.js";
 import { isValidCaseId, saveReferenceEmbedding } from "../lib/store.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -66,8 +67,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Décodage séparé du calcul de descripteur : un base64 valide mais non décodable
+  // (HEIC, PDF, fichier corrompu) doit donner un 400 JSON, pas une exception canvas
+  // qui remonte hors du handler en page 500 générique côté Vercel (issue #20).
+  const image = await toImage(imageBuffer).catch(() => null);
+  if (image === null) {
+    res.status(400).json({
+      error: "invalid_image",
+      detail: "undecodable image (unsupported format or corrupted)",
+    });
+    return;
+  }
+
   try {
-    const descriptor = await computeFaceDescriptor(imageBuffer);
+    const descriptor = await computeFaceDescriptor(image);
     const embedding = Array.from(descriptor);
     await saveReferenceEmbedding(caseId, embedding);
     res.status(200).json({ caseId, embedding });

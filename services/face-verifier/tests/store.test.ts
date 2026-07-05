@@ -1,4 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type EvidenceRecord,
@@ -14,6 +17,13 @@ import {
 function testCaseId(): string {
   return `test-${randomBytes(4).toString("hex")}`;
 }
+
+// Chemins reconstruits à l'identique de store.ts — délibérément non exportés par le
+// module (aucun appelant de prod n'a à connaître le layout disque) ; les tests G-5
+// ci-dessous doivent lire les octets bruts pour prouver qu'ils sont chiffrés.
+const STORAGE_ROOT = path.join(os.tmpdir(), "mira-face-verifier");
+const rawReferencePath = (caseId: string) => path.join(STORAGE_ROOT, "reference", `${caseId}.json`);
+const rawEvidencePath = (caseId: string) => path.join(STORAGE_ROOT, "evidence", `${caseId}.json`);
 
 describe("evidence store", () => {
   const caseIds: string[] = [];
@@ -98,6 +108,45 @@ describe("evidence store", () => {
 
     expect(await loadEvidence(caseId)).toEqual([]);
     expect(await loadReferenceEmbedding(caseId)).toBeNull();
+  });
+
+  it("G-5: never writes a plaintext embedding or evidence to disk", async () => {
+    const caseId = testCaseId();
+    caseIds.push(caseId);
+
+    const embedding = Array.from({ length: 128 }, (_, i) => i / 128);
+    await saveReferenceEmbedding(caseId, embedding);
+    await saveEvidence({
+      caseId,
+      sourceUrl: "https://example.test/secret-location.jpg",
+      sha256Hash: "abc123",
+      perceptualHash: "def456",
+      similarityScore: 0.9,
+      isMatch: true,
+      discoveredAt: new Date().toISOString(),
+    });
+
+    const rawReference = await readFile(rawReferencePath(caseId), "utf-8");
+    expect(rawReference).not.toContain("embedding");
+    expect(JSON.parse(rawReference)).toMatchObject({ alg: "aes-256-gcm" });
+
+    const rawEvidence = await readFile(rawEvidencePath(caseId), "utf-8");
+    expect(rawEvidence).not.toContain("secret-location");
+    expect(rawEvidence).not.toContain("sourceUrl");
+    expect(JSON.parse(rawEvidence)).toMatchObject({ alg: "aes-256-gcm" });
+  });
+
+  it("treats an undecryptable file (legacy plaintext or lost ephemeral key) as absent, not a crash", async () => {
+    const caseId = testCaseId();
+    caseIds.push(caseId);
+
+    await mkdir(path.dirname(rawReferencePath(caseId)), { recursive: true });
+    await mkdir(path.dirname(rawEvidencePath(caseId)), { recursive: true });
+    await writeFile(rawReferencePath(caseId), JSON.stringify({ caseId, embedding: [0.1] }), "utf-8");
+    await writeFile(rawEvidencePath(caseId), "corrupted-bytes", "utf-8");
+
+    expect(await loadReferenceEmbedding(caseId)).toBeNull();
+    expect(await loadEvidence(caseId)).toEqual([]);
   });
 
   it("isValidCaseId accepts safe identifiers and rejects path-traversal attempts", () => {

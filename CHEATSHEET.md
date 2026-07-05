@@ -1,39 +1,39 @@
-# CHEATSHEET — Playbook skills & orga (jour J)
+# CHEATSHEET — Skills & ops playbook (game day)
 
-## 🎛️ Quel skill / commande à quel moment
+## 🎛️ Which skill / command, when
 
-| Moment | Outil | Pourquoi |
-|--------|-------|----------|
-| **Choisir + verrouiller l'idée** (sam matin) | `/brainstorming` puis `/premortem` | Cadre l'intention avant de coder, puis tue les risques (Tigres/Éléphants) avant d'engager 15h dessus |
-| **Comprendre vite le problem statement / stack sponsor** | `/deep-research` · MCP **context7** (`resolve-library-id` → `query-docs`) · agent **Explore** | Docs à jour d'une lib/API sponsor sans deviner |
-| **Scaffold + déployer** | `/vercel:bootstrap` puis `/vercel:deploy` · skills `vercel:nextjs`, `vercel:shadcn` | Preview URL = démo dès la 1re heure |
-| **Brancher un LLM** | skill `vercel:ai-sdk` · skill `claude-api` (model ids, streaming, tool use) | Intégration agent propre et à jour |
-| **UI qui claque pour la démo** | skill `frontend-design` · agent `vercel:ai-architect` | La démo pèse 50% — le visuel vend |
-| **Ça marche vraiment ?** | `/run` · `/verify` | La démo est notée en live, pas les tests |
-| **Bloqué sur un bug** | `/systematic-debugging` | Évite les fixes au pif sous stress |
-| **Graphes/dashboards dans la démo** | skill `dataviz` | Un seul système visuel cohérent |
-| **Vidéo 1 min léchée** | skill `remotion` (si tu veux du motion) sinon Loom | Deliverable obligatoire |
-| **Paralléliser du build indépendant** | `/dispatching-parallel-agents` · agents `general-purpose` / `Explore` | Toi + agents en parallèle sur des slices disjointes |
-| **Capturer une décision/learning** | skill `second-brain` | Post-hackathon, sans polluer le build |
+| Moment | Tool | Why |
+|--------|-------|-----|
+| **Pick + lock the idea** (Sat morning) | `/brainstorming` then `/premortem` | Frames intent before coding, then kills the risks (Tigers/Elephants) before committing 15h to it |
+| **Quickly grasp the problem statement / sponsor stack** | `/deep-research` · MCP **context7** (`resolve-library-id` → `query-docs`) · **Explore** agent | Up-to-date docs for a sponsor lib/API without guessing |
+| **Scaffold + deploy** | `/vercel:bootstrap` then `/vercel:deploy` · skills `vercel:nextjs`, `vercel:shadcn` | Preview URL = demo from hour one |
+| **Wire an LLM** | skill `vercel:ai-sdk` · skill `claude-api` (model ids, streaming, tool use) | Clean, up-to-date agent integration |
+| **UI that pops for the demo** | skill `frontend-design` · agent `vercel:ai-architect` | The demo is worth 50% — visuals sell |
+| **Does it actually work?** | `/run` · `/verify` | The demo is judged live, not the tests |
+| **Stuck on a bug** | `/systematic-debugging` | Avoids random fixes under stress |
+| **Charts/dashboards in the demo** | skill `dataviz` | One coherent visual system |
+| **Polished 1-min video** | skill `remotion` (if you want motion) otherwise Loom | Mandatory deliverable |
+| **Parallelize independent build** | `/dispatching-parallel-agents` · agents `general-purpose` / `Explore` | You + agents in parallel on disjoint slices |
+| **Capture a decision/learning** | skill `second-brain` | Post-hackathon, without polluting the build |
 
-## ⚡ Boucle de build recommandée
-1. `/brainstorming` → one-liner + chemin de démo en 3 étapes.
-2. `/premortem` → si un Éléphant apparaît, pivote **maintenant**.
-3. Scaffold Next.js + `vercel deploy` (URL vide en ligne).
-4. **Vertical slice** : la 1re des 3 étapes de démo, end-to-end, déployée.
-5. `/verify` → screenshot → étape suivante. Répète.
-6. Dim matin : freeze, polish, vidéo, pitch.
+## ⚡ Recommended build loop
+1. `/brainstorming` → one-liner + 3-step demo path.
+2. `/premortem` → if an Elephant shows up, pivot **now**.
+3. Scaffold Next.js + `vercel deploy` (empty URL online).
+4. **Vertical slice**: the first of the 3 demo steps, end-to-end, deployed.
+5. `/verify` → screenshot → next step. Repeat.
+6. Sun morning: freeze, polish, video, pitch.
 
-## 📇 Facts orga (source: Second Brain `raise-hackathon-2026.md`)
+## 📇 Ops facts (source: Second Brain `raise-hackathon-2026.md`)
 - **Cerebral Valley / cv.inc** · contact **alex@cv.inc** · Discord `N26eKqmR42`.
-- Venues Paris 9e : **La Maison** (2 rue des Mathurins, track Cursor) · **Neon Noir** (14 rue Le Peletier, Vultr/DeepMind/Crusoe). Présentiel = **premier arrivé premier servi**, sois là **8h30**.
-- Présentiel = **exactement 5** en équipe · remote = max 5.
-- Jugement R1 ~3 min pitch + Q/A → top 3/track sur scène.
-- **Statut mineur (17 ans)** : point à avoir clarifié avec alex@cv.inc (âge/soirée).
+- Paris 9th venues: **La Maison** (2 rue des Mathurins, Cursor track) · **Neon Noir** (14 rue Le Peletier, Vultr/DeepMind/Crusoe). On-site = **first come, first served**, be there **8:30**.
+- On-site = **exactly 5** per team · remote = max 5.
+- R1 judging ~3-min pitch + Q&A → top 3/track on stage.
+- **Minor status (17 y/o)**: item to clarify with alex@cv.inc (age/party).
 
-## 🎯 Grille de jugement (colle-la au mur mental)
-**Demo 50 · Impact 25 · Créativité 15 · Pitch 10.**
-Chaque arbitrage → « est-ce que ça rend la démo live plus impressionnante et plus fiable ? » Si non, coupe.
+## 🎯 Judging grid (stick it to your mental wall)
+**Demo 50 · Impact 25 · Creativity 15 · Pitch 10.**
+Every trade-off → "does this make the live demo more impressive and more reliable?" If not, cut it.
 
-## 🚫 Bannis (disqualifiants)
-RAG basique · Streamlit · image analyzer · chatbot générique · CV screener · conseil médical. Vise **agentique / technique / infra**.
+## 🚫 Banned (disqualifying)
+Basic RAG · Streamlit · image analyzer · generic chatbot · CV screener · medical advice. Aim for **agentic / technical / infra**.

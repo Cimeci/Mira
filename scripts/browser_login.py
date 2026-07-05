@@ -33,7 +33,7 @@ def main() -> None:
                 PROFILE_DIR,
                 headless=False,
                 no_viewport=True,  # fenêtre normale, redimensionnable, bien visible
-                args=["--no-first-run", "--no-default-browser-check"],
+                args=["--no-first-run", "--no-default-browser-check", "--start-maximized"],
             )
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(url)

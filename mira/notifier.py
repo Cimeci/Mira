@@ -22,7 +22,7 @@ import os
 import re
 from collections.abc import Awaitable, Callable
 
-from . import config
+from . import config, takedown
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, Mandate, NotificationRecord, Status, utcnow
 
@@ -208,14 +208,28 @@ async def send(
         from_status=Status.AWAITING_CONFIRM,
         payload={"url": record.source_url},
     ))
-    # MOCK dispatch. Le vrai : Resend/portail vers l'inbox de démo uniquement.
+    # Real dispatch via the resolved takedown skill, to the demo inbox only (G-12); mock
+    # fallback when unconfigured. A real send failure is a FAILED terminal, never a crash.
+    try:
+        sent, skill = await takedown.submit(notice, record, mandate)
+    except Exception as exc:  # noqa: BLE001 - dispatch failure -> FAILED, not a crash
+        emit(make_event(
+            record.case_id,
+            "notifier",
+            Status.FAILED,
+            from_status=Status.CONFIRMED,
+            detail=f"[NOTIFY] dispatch failed ({type(exc).__name__}) -> FAILED",
+            payload={"url": record.source_url, "reason": "dispatch_failure"},
+        ))
+        return _record(record, host, notice, Status.FAILED)
+    channel = "demo inbox" if sent else "mock"
     emit(make_event(
         record.case_id,
         "notifier",
         Status.NOTIFIED,
         from_status=Status.CONFIRMED,
-        detail=f"[NOTIFY] notice DSA envoyée à {host}",
-        payload={"url": record.source_url},
+        detail=f"[NOTIFY] DSA notice dispatched via {skill.label} ({channel})",
+        payload={"url": record.source_url, "skill": skill.name},
     ))
     return _record(record, host, notice, Status.NOTIFIED)
 

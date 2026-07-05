@@ -1,0 +1,31 @@
+name: deploy-backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mira/**"
+      - "services/**"
+      - "requirements.txt"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+# Deploys over SSH to a Nebius VM that already has Docker + the repo cloned at ~/Mira.
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.NEBIUS_HOST }}
+          username: ${{ secrets.NEBIUS_SSH_USER }}
+          key: ${{ secrets.NEBIUS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/Mira
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose up -d --build
+            docker image prune -f

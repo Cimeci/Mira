@@ -1,57 +1,65 @@
-"""Stage 2 — L'Analyzer. Pré-check mineur, vérification forensique, preuve minimale.
+"""Stage 2 — the Analyzer. Minor pre-check, forensic verification, minimal evidence.
 
-Lane L2. Le vrai : API CV (Sightengine) pour le score deepfake, pHash. Ici : mocks
-(cacher la réponse CV pour la démo, R-06).
+Lane L2. The real thing: a CV API (Sightengine) for the deepfake score + pHash. Here:
+mocks for the deepfake/pHash side; the face match is real (mira/face, ArcFace).
 
-Verrou d'ordre G-6 — structurel, pas conventionnel
---------------------------------------------------
-`analyze()` est découpé en 3 phases nommées qui s'exécutent dans cet ordre :
+Order lock — structural, not by convention
+------------------------------------------
+`analyze()` is split into 4 named phases that run in this exact order:
 
-  1. `_phase_precheck_minor`   — signaux NON-binaires uniquement (tokens URL/metadata).
-  2. `_phase_score`            — score deepfake, toujours sans toucher aux octets.
-  3. `_phase_capture_and_hash` — le SEUL endroit du système autorisé à toucher des
-                                 octets média, via le hook `_fetch_bytes`.
+  1. `_phase_precheck_minor`   — NON-binary signals only (URL/metadata tokens).
+  2. `_phase_face_match`       — does the media match the mandate's face? (real ArcFace).
+  3. `_phase_score`            — deepfake score, still without touching any bytes.
+  4. `_phase_capture_and_hash` — the ONLY place in the system allowed to touch media
+                                 bytes, via the `_fetch_bytes` hook.
 
-La phase 3 est INATTEIGNABLE si la phase 1 escalade ou si la phase 2 rejette :
-`analyze()` fait un early return structurel — pas de flag, pas de branche à oublier.
-Un refactor qui déplacerait le download avant le pré-check devrait réécrire les
-3 phases ET casser tests/test_analyzer_order.py.
+Phase 4 is UNREACHABLE if phase 1 escalates or phase 2/3 rejects: `analyze()` does a
+structural early return at each guard — no flag, no branch to forget. A refactor that
+moved the download before the pre-check would have to rewrite all 4 phases AND break
+tests/test_analyzer_order.py + tests/test_face_match.py. The face match runs AFTER the
+minor pre-check, never before: analyzing the face of a suspected minor is already the
+harm we avoid (same reasoning as PIXEL_AGE_ESTIMATION_FORBIDDEN).
 
-PIXEL_AGE_ESTIMATION_FORBIDDEN : l'estimation d'âge sur pixels est INTERDITE ici,
-y compris « pour améliorer le pré-check ». Analyser l'image d'un mineur EST déjà
-le mal qu'on évite (G-6) — le pré-check ne consomme donc QUE des signaux
-non-binaires : tokens d'URL, nom de fichier, contexte de la page.
+PIXEL_AGE_ESTIMATION_FORBIDDEN: pixel-based age estimation is FORBIDDEN here, including
+"to improve the pre-check". Analyzing a minor's image IS already the harm we avoid — so
+the pre-check consumes ONLY non-binary signals: URL tokens, filename, page context.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import logging
+import os
 
+import httpx
+
+from . import face, prompts, safety, store, vision
 from .config import DEEPFAKE_SCORE_THRESHOLD
 from .events import Emit, make_event, print_emitter
 from .types import ForensicRecord, MediaItem, Status, utcnow
 
-# Même canal de trace dev que l'orchestrateur : silencieux en démo, stacktrace
-# complète avec logging.basicConfig(level=logging.DEBUG).
+# Same dev trace channel as the orchestrator: silent in the demo, full stacktrace with
+# logging.basicConfig(level=logging.DEBUG).
 _logger = logging.getLogger("mira")
 
-# G-6 : aucune API d'estimation d'âge sur pixels ne doit JAMAIS entrer dans ce module.
-# Référencée par la docstring du module — c'est un contrat, pas une config.
+# No pixel-based age-estimation API may EVER enter this module. Referenced by the module
+# docstring — it's a contract, not a config.
 PIXEL_AGE_ESTIMATION_FORBIDDEN = True
 
-# Tokens non-binaires (URL / filename / contexte page) qui déclenchent l'escalade G-6.
-# En démo le flag vient de l'URL/metadata, JAMAIS d'une image (voir premortem E2).
+# Non-binary tokens (URL / filename / page context) that trigger escalation. In the demo
+# the flag comes from the URL/metadata, NEVER from an image (see premortem E2).
 _MINOR_TOKENS = ("minor",)
 
 
 async def _suspected_minor(item: MediaItem) -> str | None:
-    """Pré-check mineur sur signaux NON-binaires uniquement. Renvoie le token détecté.
+    """Minor pre-check on NON-binary signals only. Returns the detected token.
 
-    Garde explicite G-6 : ce check ne lit QUE des métadonnées (tokens d'URL, filename,
-    contexte de page) — jamais un octet du média (PIXEL_AGE_ESTIMATION_FORBIDDEN).
-    Le trigger substring URL est le chemin DÉMO : en démo le flag vient de
-    l'URL/metadata, JAMAIS d'une image.
+    Explicit guard: this check reads ONLY metadata (URL tokens, filename, page context)
+    — never a byte of the media (PIXEL_AGE_ESTIMATION_FORBIDDEN). The URL-substring
+    trigger is the DEMO path: in the demo the flag comes from the URL/metadata, never an
+    image.
     """
     for token in _MINOR_TOKENS:
         if token in item.url:
@@ -60,63 +68,143 @@ async def _suspected_minor(item: MediaItem) -> str | None:
 
 
 async def _cv_score(item: MediaItem) -> float:
-    """MOCK Sightengine. Le vrai : détecteur de média synthétique 0.0-1.0 (sur l'URL,
-    pas sur des octets stockés par nous)."""
+    """MOCK Sightengine. The real thing: a synthetic-media detector 0.0-1.0 (on the URL,
+    not on bytes we've stored)."""
     return 0.94
 
 
-def _fetch_bytes(item: MediaItem) -> bytes:
-    """Hook unique d'accès aux octets média. MOCK : encode l'URL, zéro réseau.
+async def _fetch_candidate(url: str) -> bytes | None:
+    """Download the candidate image into memory (never to disk). None if not
+    retrievable — best-effort: an infra failure must not reject the evidence."""
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            return resp.content
+    except Exception:  # noqa: BLE001 - any failure = unverifiable, not fatal
+        return None
 
-    Appelé UNIQUEMENT par `_phase_capture_and_hash` — si ce hook tourne sur un cas
-    escaladé ou rejeté, c'est un bug G-6 (tests/test_analyzer_order.py le prouve
-    en le remplaçant par une bombe RuntimeError).
+
+async def _face_match(item: MediaItem) -> tuple[bool, float | None]:
+    """Real face match — insightface ArcFace, in-process (mira/face).
+
+    Reads the case's enrolled 512-d reference and checks EVERY face detected in the
+    candidate (the victim may not be the largest face in a scraped image). Returns
+    (is_match, score). Pass-through (True, None) when no reference is enrolled or the
+    image can't be fetched — so the demo and unconfigured runs are never rejected here.
     """
+    reference = await store.get_reference_embedding(item.case_id)
+    if reference is None:
+        return True, None
+    image = await _fetch_candidate(item.url)
+    if image is None:
+        return True, None
+    faces = await asyncio.to_thread(face.embed_all, image)  # CPU-bound → off the loop
+    distance = face.match_distance(reference, faces)
+    return face.is_match(distance), face.similarity(distance)
+
+
+def _sightengine_configured() -> bool:
+    return bool(os.getenv("SIGHTENGINE_API_USER") and os.getenv("SIGHTENGINE_API_SECRET"))
+
+
+def _safety_configured() -> bool:
+    """True if EITHER the nudity classifier (Sightengine) OR the intent LLM (Grok) is set."""
+    return _sightengine_configured() or bool(os.getenv("XAI_API_KEY"))
+
+
+async def _assess_intent(image: bytes) -> dict | None:
+    """Best-effort intent verdict via Grok (JSON). None if XAI unset or anything fails —
+    intent annotates, it must never break the pipeline."""
+    if not os.getenv("XAI_API_KEY"):
+        return None
+    try:
+        raw = await asyncio.to_thread(vision.ask_grok, image, prompts.load("nudity_intent"))
+        return json.loads(raw)
+    except Exception:  # noqa: BLE001 - annotation only, never fatal
+        return None
+
+
+async def _phase_nudity_intent(item: MediaItem) -> tuple[bool, float | None, dict | None]:
+    """Phase 2.5 — content-safety gate. Proceeds if the image is explicit (Sightengine
+    nudity) OR shows abusive intent (Grok) — non-consensual harm isn't only nudity, a
+    humiliating/private non-nude image counts too. Returns (proceed, nudity_score,
+    intent). Pass-through (True, None, None) when neither classifier is configured or the
+    image is unfetchable."""
+    if not _safety_configured():
+        return True, None, None
+    image = await _fetch_candidate(item.url)
+    if image is None:
+        return True, None, None
+
+    score: float | None = None
+    explicit = False
+    if _sightengine_configured():
+        nudity = await asyncio.to_thread(safety.nudity_scores, image)
+        score = safety.explicitness(nudity)
+        explicit = safety.is_explicit(nudity)
+
+    intent = await _assess_intent(image)  # Grok; None if XAI unset or it fails
+    abusive = bool(intent and intent.get("abusive_intent"))
+    return (explicit or abusive), score, intent
+
+
+def _fetch_bytes(item: MediaItem) -> bytes:
+    """The single media-byte access hook. MOCK: encodes the URL, zero network.
+
+    Called ONLY by `_phase_capture_and_hash` — if this hook runs on an escalated or
+    rejected case, that's a bug (tests/test_analyzer_order.py proves it by replacing it
+    with a RuntimeError bomb)."""
     return item.url.encode()
 
 
 async def _phase_precheck_minor(item: MediaItem) -> str | None:
-    """Phase 1/3 — pré-check mineur AVANT tout octet (G-6). Token détecté ou None."""
+    """Phase 1/4 — minor pre-check BEFORE any byte. Detected token or None."""
     return await _suspected_minor(item)
 
 
+async def _phase_face_match(item: MediaItem) -> tuple[bool, float | None]:
+    """Phase 2/4 — does the media show the mandate victim's face?
+
+    Runs AFTER the minor pre-check, never before. Real ArcFace (mira/face); fetches the
+    candidate itself, post-pre-check, and only if a reference is enrolled."""
+    return await _face_match(item)
+
+
 async def _phase_score(item: MediaItem) -> float:
-    """Phase 2/3 — score deepfake. Toujours aucun octet touché ni stocké."""
+    """Phase 3/4 — deepfake score. Still no bytes touched or stored."""
     return await _cv_score(item)
 
 
 async def _phase_capture_and_hash(item: MediaItem) -> tuple[str, str]:
-    """Phase 3/3 — LE seul endroit qui touche des octets média (via `_fetch_bytes`).
+    """Phase 4/4 — the ONLY place that touches media bytes (via `_fetch_bytes`).
 
-    G-5 : on ne retient que des empreintes (phash + sha256), jamais les octets bruts.
-    """
+    We keep only fingerprints (phash + sha256), never the raw bytes."""
     data = _fetch_bytes(item)
     phash = f"phash:{hashlib.sha1(data).hexdigest()[:16]}"  # MOCK pHash
-    sha = hashlib.sha256(data).hexdigest()  # MOCK (vrai : hash de la capture)
+    sha = hashlib.sha256(data).hexdigest()  # MOCK (real: hash of the capture)
     return phash, sha
 
 
 async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> ForensicRecord:
-    """Consomme un MediaItem in-scope, renvoie un ForensicRecord. Émet la transition d'état.
+    """Consume an in-scope MediaItem, return a ForensicRecord. Emits the state transition.
 
-    Ordre G-6 verrouillé par la structure : precheck -> score -> capture, avec early
-    return à chaque garde — `_phase_capture_and_hash` est inatteignable si escalade
-    ou score sous le seuil.
-    """
-    # Phase 1 — G-6 : le pré-check mineur tourne AVANT tout stockage. Non négociable (§12).
+    Order locked by structure: precheck -> face-match -> score -> capture, with an early
+    return at each guard — `_phase_capture_and_hash` is unreachable on escalation, a face
+    mismatch, or a below-threshold score."""
+    # Phase 1 — the minor pre-check runs BEFORE any storage. Non-negotiable (spec §12).
     try:
         token = await _phase_precheck_minor(item)
     except Exception as exc:
-        # Précaution G-6 : un pré-check EN PANNE ne peut pas exclure un mineur -> le cas
-        # est traité comme une suspicion (halt + escalade), JAMAIS comme un FAILED
-        # générique indiscernable d'un timeout CV. Ici, même les erreurs de contrat
-        # n'ont pas le droit de contourner l'escalade — c'est l'exception délibérée à
-        # la politique _CONTRACT_ERRORS de l'orchestrateur. Le message d'exception ne
-        # sort jamais (URL/PII possible) : type seulement, stacktrace sur le logger dev.
-        _logger.debug("pré-check mineur en panne sur %s", item.case_id, exc_info=exc)
+        # A FAILED pre-check cannot rule out a minor -> the case is treated as a suspicion
+        # (halt + escalate), NEVER as a generic FAILED indistinguishable from a CV timeout.
+        # Even contract errors may not bypass escalation here — the deliberate exception to
+        # the orchestrator's _CONTRACT_ERRORS policy. The exception message never leaks
+        # (may contain URL/PII): type only, stacktrace on the dev logger.
+        _logger.debug("minor pre-check failed on %s", item.case_id, exc_info=exc)
         log(
-            f"[ANALYZE] pré-check G-6 en panne ({type(exc).__name__}) "
-            "-> escalade par précaution"
+            f"[ANALYZE] minor pre-check failed ({type(exc).__name__}) "
+            "-> escalating as a precaution"
         )
         emit(make_event(
             item.case_id,
@@ -124,30 +212,66 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
             Status.ESCALATED,
             from_status=Status.LOCATED,
             detail=(
-                f"[ANALYZE] pré-check mineur en panne ({type(exc).__name__}) -> ESCALATE "
-                "par précaution : aucun download, aucun hash, aucun stockage"
+                f"[ANALYZE] minor pre-check failed ({type(exc).__name__}) -> ESCALATE "
+                "as a precaution: no download, no hash, no storage"
             ),
             payload={"reason": "precheck_failure"},
         ))
         return _record(item, score=0.0, phash="", sha="", status=Status.ESCALATED)
     if token is not None:
-        log(f"[ANALYZE] pré-check G-6 : token {token!r} détecté (URL/metadata) -> escalade")
-        # Event MINIMAL par design G-6 : case_id + raison, pas d'URL du média, pas de hash —
-        # rien n'a été téléchargé ni stocké, l'event ne doit rien exposer non plus.
+        log(f"[ANALYZE] minor pre-check: token {token!r} detected (URL/metadata) -> escalate")
+        # MINIMAL event by design: case_id + reason, no media URL, no hash — nothing was
+        # downloaded or stored, so the event must expose nothing either.
         emit(make_event(
             item.case_id,
             "analyzer",
             Status.ESCALATED,
             from_status=Status.LOCATED,
             detail=(
-                "[ANALYZE] mineur suspecté -> ESCALATE : "
-                "aucun download, aucun hash, aucun stockage"
+                "[ANALYZE] suspected minor -> ESCALATE: "
+                "no download, no hash, no storage"
             ),
             payload={"reason": "suspected_minor"},
         ))
         return _record(item, score=0.0, phash="", sha="", status=Status.ESCALATED)
 
-    # Phase 2 — score, toujours sans octets.
+    # Phase 2 — face match: only proceed if the media matches the mandate's face.
+    # A non-match is NOT a deepfake of the victim -> out of mandate, REJECTED.
+    is_match, face_score = await _phase_face_match(item)
+    if not is_match:
+        emit(make_event(
+            item.case_id,
+            "analyzer",
+            Status.REJECTED,
+            from_status=Status.LOCATED,
+            detail=(
+                "[ANALYZE] face-match negative: media does not match the mandate's face "
+                "-> REJECTED, no bytes stored"
+            ),
+            payload={"url": item.url, "reason": "face_mismatch", "face_score": face_score},
+        ))
+        return _record(item, score=0.0, phash="", sha="", status=Status.REJECTED)
+    face_score_txt = "n/a" if face_score is None else f"{face_score:.2f}"
+    log(f"[ANALYZE] face-match: mandate face confirmed (score {face_score_txt})")
+
+    # Phase 2.5 — nudity gates (must be explicit intimate imagery), intent annotates.
+    # The scores are stored on the record even on rejection (audit + takedown context).
+    proceed, nudity_score, intent = await _phase_nudity_intent(item)
+    if not proceed:
+        emit(make_event(
+            item.case_id,
+            "analyzer",
+            Status.REJECTED,
+            from_status=Status.LOCATED,
+            detail="[ANALYZE] not harmful (no nudity, no abusive intent) -> REJECTED",
+            payload={"url": item.url, "reason": "not_harmful", "nudity_score": nudity_score},
+        ))
+        return _record(
+            item, score=0.0, phash="", sha="", status=Status.REJECTED,
+            nudity_score=nudity_score, intent=intent,
+        )
+
+    # Phase 3 — score, still without bytes.
     score = await _phase_score(item)
     if score < DEEPFAKE_SCORE_THRESHOLD:
         emit(make_event(
@@ -157,13 +281,13 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
             from_status=Status.LOCATED,
             detail=(
                 f"[ANALYZE] score {score:.2f} < {DEEPFAKE_SCORE_THRESHOLD} "
-                "-> REJECTED, aucun octet stocké"
+                "-> REJECTED, no bytes stored"
             ),
             payload={"url": item.url, "score": score},
         ))
         return _record(item, score=score, phash="", sha="", status=Status.REJECTED)
 
-    # Phase 3 — atteinte UNIQUEMENT si ni escalade ni rejet. G-5 : empreintes seulement.
+    # Phase 4 — reached ONLY if neither escalated nor rejected. Fingerprints only.
     phash, sha = await _phase_capture_and_hash(item)
     emit(make_event(
         item.case_id,
@@ -171,15 +295,26 @@ async def analyze(item: MediaItem, *, log=print, emit: Emit = print_emitter) -> 
         Status.VERIFIED,
         from_status=Status.LOCATED,
         detail=(
-            f"[ANALYZE] score {score:.2f} >= seuil -> VERIFIED, preuve minimale (phash + sha256)"
+            f"[ANALYZE] score {score:.2f} >= threshold -> VERIFIED, "
+            "minimal evidence (phash + sha256)"
         ),
         payload={"url": item.url, "score": score, "phash": phash, "sha256": sha},
     ))
-    return _record(item, score=score, phash=phash, sha=sha, status=Status.VERIFIED)
+    return _record(
+        item, score=score, phash=phash, sha=sha, status=Status.VERIFIED,
+        nudity_score=nudity_score, intent=intent,
+    )
 
 
 def _record(
-    item: MediaItem, *, score: float, phash: str, sha: str, status: Status
+    item: MediaItem,
+    *,
+    score: float,
+    phash: str,
+    sha: str,
+    status: Status,
+    nudity_score: float | None = None,
+    intent: dict | None = None,
 ) -> ForensicRecord:
     return ForensicRecord(
         case_id=item.case_id,
@@ -189,4 +324,6 @@ def _record(
         sha256_hash=sha,
         discovery_ts_utc=utcnow(),
         status=status,
+        nudity_score=nudity_score,
+        intent=intent,
     )

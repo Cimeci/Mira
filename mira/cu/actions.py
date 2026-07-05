@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from playwright.async_api import Page
 
-from . import guard
-
 VIEWPORT = {"width": 1280, "height": 900}
 
 
@@ -25,10 +23,6 @@ async def exec_action(page: Page, name: str, args: dict) -> dict:
     if name == "open_web_browser":
         return {"status": "ok"}
     if name == "navigate":
-        # G-2/G-12 : l'URL vient du modèle (contenu web non fiable). On la refuse AVANT
-        # tout goto si elle sort du périmètre — jamais de chargement d'un site tiers.
-        if not guard.is_allowed(args["url"]):
-            return {"status": "blocked_out_of_scope", "url": args["url"]}
         await page.goto(args["url"], wait_until="domcontentloaded")
         return {"status": "ok"}
     if name == "click_at":

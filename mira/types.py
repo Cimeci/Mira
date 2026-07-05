@@ -7,7 +7,7 @@ propre à 5 (chacun code librement DANS son module, tant que l'interface tient).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -49,6 +49,9 @@ class Mandate:
     active: bool = True               # False dès révocation
     legal_basis: str = DEFAULT_LEGAL_BASIS  # citation source de la notice (G-9)
     revoked_ts_utc: datetime | None = None  # quand le mandat a été révoqué (G-10)
+    # Victim's chosen takedown routes (wireframe p2): report_platform | contact_host
+    # | file_complaint. Drives which takedown skill runs (see mira/takedown.resolve_skill).
+    action_paths: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -72,6 +75,8 @@ class ForensicRecord:
     discovery_ts_utc: datetime
     status: Status                    # VERIFIED | REJECTED | ESCALATED
     minimal_ref: Path | None = None   # chiffré, seulement si strictement requis
+    nudity_score: float | None = None  # Sightengine explicitness 0.0-1.0 (None if unchecked)
+    intent: dict | None = None         # Grok intent verdict {abusive_intent, confidence, reason}
 
 
 @dataclass

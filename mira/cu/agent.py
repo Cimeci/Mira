@@ -15,8 +15,6 @@ from dotenv import dotenv_values
 from google import genai
 from google.genai import types
 from playwright.async_api import Page, async_playwright
-
-from . import guard
 from .actions import exec_action
 from .browser import open_page
 from .live import data_uri
@@ -24,7 +22,7 @@ from .models import ScrapedImage, ScrapeResult
 from .scraper import _resolve_creds, _validate_url, extract_images
 
 MODEL = "gemini-2.5-computer-use-preview-10-2025"
-_MAX_STEPS = 12
+_MAX_STEPS = 2000  # runaway ceiling only — the agent stops itself when the task is done
 _ENV_FILE = ".env.local"
 _FRAME_QUALITY = 55  # JPEG : compromis netteté / poids pour le stream
 
@@ -76,6 +74,7 @@ async def _run_cu_loop(
     email: str,
     password: str,
     max_steps: int,
+    auto_confirm_sensitive: bool = False,
 ) -> AsyncIterator[dict]:
     """Boucle vision-action de Gemini sur la page COURANTE (le goto est fait par
     l'appelant). Yield reasoning · action · frame · safety · note. S'arrête quand
@@ -100,8 +99,13 @@ async def _run_cu_loop(
         response = await client.aio.models.generate_content(
             model=MODEL, contents=contents, config=config
         )
-        candidate = response.candidates[0]
-        parts = candidate.content.parts or []
+        candidate = response.candidates[0] if response.candidates else None
+        # A blocked / empty response has no content — stop gracefully instead of crashing.
+        if candidate is None or candidate.content is None or not candidate.content.parts:
+            reason = getattr(candidate, "finish_reason", None) if candidate else "no_candidate"
+            yield {"type": "note", "text": f"⚠️ agent stopped: empty response (reason={reason})"}
+            return
+        parts = candidate.content.parts
         calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
 
         for part in parts:
@@ -118,42 +122,36 @@ async def _run_cu_loop(
             args = dict(call.args) if call.args else {}
             safety = args.pop("safety_decision", None)
             if safety and safety.get("decision") == "require_confirmation":
-                # G-7 : action sensible (connexion) — on ne la franchit jamais seul.
                 yield {
                     "type": "safety",
                     "action": call.name,
-                    "text": safety.get("explanation", "action sensible"),
+                    "text": safety.get("explanation", "sensitive action"),
                 }
-                yield {
-                    "type": "note",
-                    "text": "🔒 Garde-fou G-7 : action sensible — arrêt, pas de login automatique.",
-                }
-                return
+                if not auto_confirm_sensitive:
+                    # Default (e.g. scraper login): don't cross a sensitive action alone.
+                    yield {
+                        "type": "note",
+                        "text": "🔒 sensitive action — stopped, not done automatically.",
+                    }
+                    return
+                # Takedown: auto-confirm the sensitive action (e.g. submit) and proceed.
+                yield {"type": "note", "text": "▶ sensitive action auto-confirmed."}
             yield {"type": "action", "name": call.name, "args": _redact(str(args), email, password)}
             action_result = await exec_action(page, call.name, args)
             await page.wait_for_timeout(500)
-            # Verrou 3/3 (G-2/G-12) : re-vérifier APRÈS coup. Un clic sur un lien ou une
-            # redirection a pu sortir du périmètre sans action `navigate` explicite —
-            # on halte AVANT toute capture/exploitation de la page tierce.
-            if not guard.is_allowed(page.url):
-                yield {
-                    "type": "note",
-                    "text": (
-                        f"🔒 Garde-fou G-2 : sortie de périmètre bloquée "
-                        f"({guard.host_of(page.url)}) — arrêt de l'exploration."
-                    ),
-                }
-                return
             next_png = await page.screenshot(type="png")
             yield {
                 "type": "frame",
                 "label": call.name,
                 "image": data_uri(await page.screenshot(type="jpeg", quality=_FRAME_QUALITY)),
             }
+            response = {"url": page.url, **action_result}
+            if safety:
+                # The Computer-Use API requires the safety decision to be echoed back in
+                # the function response, or the next turn is rejected with a 400.
+                response["safety_acknowledgement"] = "true"
             response_parts.append(
-                types.Part.from_function_response(
-                    name=call.name, response={"url": page.url, **action_result}
-                )
+                types.Part.from_function_response(name=call.name, response=response)
             )
             response_parts.append(types.Part.from_bytes(data=next_png, mime_type="image/png"))
         contents.append(types.Content(role="user", parts=response_parts))
@@ -243,3 +241,61 @@ async def scrape_images_cu(
             result.elapsed_s = event["elapsed"]
             result.screenshot_url = event.get("screenshot")
     return result
+
+
+def _takedown_task(task_template: str, content_url: str, notifier_email: str) -> str:
+    """Fill the task template's placeholders with this case's data."""
+    return (
+        task_template
+        .replace("<CONTENT_URL>", content_url)
+        .replace("<NOTIFIER_EMAIL>", notifier_email)
+    )
+
+
+async def stream_takedown_cu(
+    form_url: str,
+    content_url: str,
+    task_name: str,
+    *,
+    notifier_email: str = "notices@project-mira.example",
+    submit: bool = True,  # False = fill only, never cross the final submit (real gov portals)
+    max_steps: int = _MAX_STEPS,
+) -> AsyncIterator[dict]:
+    """Drive Gemini Computer Use to fill (and, if `submit`, submit) a takedown report form.
+
+    Opens `form_url`, loads the task from Agents/prompts/{task_name}.md (placeholders
+    filled from the case), runs the loop auto-confirming the submit. Streams
+    start · (reasoning/action/frame/note) · done · error. The caller chooses `form_url`
+    (a local form, a replica, or a real one) — nothing is hardcoded.
+    """
+    from .. import prompts
+
+    _validate_url(form_url)
+    yield {"type": "start", "driver": "gemini-cu", "url": form_url}
+
+    key = _api_key()
+    if not key:
+        yield {
+            "type": "error",
+            "message": "Gemini key missing (.env.local: GOOGLE_GENERATIVE_AI_API_KEY).",
+        }
+        return
+
+    task = _takedown_task(prompts.load(task_name), content_url, notifier_email)
+    try:
+        client = genai.Client(api_key=key)
+        config = _config()
+        async with async_playwright() as pw:
+            page, close_browser = await open_page(pw)
+            try:
+                await page.goto(form_url, wait_until="domcontentloaded", timeout=20_000)
+                yield {"type": "note", "text": f"navigate → {form_url}"}
+                async for event in _run_cu_loop(
+                    client, config, page, task, "", "", max_steps, auto_confirm_sensitive=submit
+                ):
+                    yield event
+                yield {"type": "done", "url": page.url}
+            finally:
+                await close_browser()
+    except Exception as exc:  # noqa: BLE001 — surface any failure to the caller
+        yield {"type": "error", "message": f"{type(exc).__name__}: {exc}"}

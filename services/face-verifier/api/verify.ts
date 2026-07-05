@@ -84,7 +84,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Decoded once and shared below — perceptualHash and computeFaceDescriptor
   // each used to call loadImage on the same bytes independently, decoding the
   // same image twice per request.
-  const image = await toImage(imageBuffer);
+  //
+  // Un base64 valide n'est pas forcément une image décodable (HEIC, PDF, fichier
+  // corrompu) : sans ce garde, l'exception de canvas remonte hors du handler et
+  // Vercel répond une page 500 générique au lieu du contrat JSON (issue #20).
+  const image = await toImage(imageBuffer).catch(() => null);
+  if (image === null) {
+    res.status(400).json({
+      error: "invalid_image",
+      detail: "undecodable image (unsupported format or corrupted)",
+    });
+    return;
+  }
   const perceptualHashValue = await perceptualHash(image);
   const discoveredAt = new Date().toISOString();
 

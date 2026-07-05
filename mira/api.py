@@ -52,6 +52,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from . import store
 from .events import StageEvent
 from .mandate import capture_consent, create_demo_mandate
 from .orchestrator import ConsentError, dispatch, run_until_gate
@@ -132,6 +133,8 @@ def _publish(run: CaseRun, msg: dict) -> None:
     Met aussi à jour l'état courant lu par GET /cases/{id}.
     """
     run.history.append(msg)
+    # Miroir durable (Supabase) — fire-and-forget : no-op sans clés, jamais bloquant.
+    store.event_published(run.case_id, len(run.history) - 1, msg)
     kind = msg["kind"]
     if kind == "stage":
         run.last_status = msg["event"]["to_status"]
@@ -286,6 +289,7 @@ async def create_case(req: CaseRequest | None = None) -> dict[str, str]:
     mandate = _build_mandate(req, case_id)
     run = CaseRun(case_id=case_id)
     _RUNS[case_id] = run
+    store.case_created(mandate)
     task = asyncio.create_task(_run_pipeline(run, mandate))
     _BACKGROUND_TASKS.add(task)
     task.add_done_callback(_BACKGROUND_TASKS.discard)
@@ -376,10 +380,15 @@ def _pick_confirmation(run: CaseRun, url: str | None) -> asyncio.Future[bool] | 
 
 
 def main() -> None:
-    """Lanceur local : `python -m mira.api` (équivalent `uvicorn mira.api:app`)."""
+    """Lanceur local : `python -m mira.api` (équivalent `uvicorn mira.api:app`).
+
+    Port via MIRA_API_PORT (défaut 8000) — permet de cohabiter avec mira.web
+    (MIRA_WEB_PORT, défaut 8001) sous un même `bash dev.sh`.
+    """
     import uvicorn
 
-    uvicorn.run("mira.api:app", host="127.0.0.1", port=8000, reload=False)
+    port = int(os.getenv("MIRA_API_PORT", "8000"))
+    uvicorn.run("mira.api:app", host="127.0.0.1", port=port, reload=False)
 
 
 if __name__ == "__main__":
