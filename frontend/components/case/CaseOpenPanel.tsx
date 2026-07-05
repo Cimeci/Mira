@@ -44,7 +44,8 @@ function targetLabel(url: string): string {
 /**
  * Turns the narrative "your case is open" screen into a real case: it POSTs to
  * the backend once (guarded against StrictMode double-invoke and back-nav via
- * the flow context), so the case shows up on the dashboard and gets a live view.
+ * the flow context), so a real case exists server-side before the user reaches
+ * the /cases dashboard.
  */
 export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
   const { caseId, setCaseId, urls } = useFlow();
@@ -117,12 +118,7 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
     <div className="flex w-full flex-col gap-[22px] md:w-[400px] md:flex-shrink-0">
       <ScreenTitle>your case is open ✓</ScreenTitle>
 
-      <CaseCard
-        caseId={cardId}
-        targetUrl={displayUrl}
-        status={cardStatus}
-        interactive={false}
-      />
+      <CaseCard caseId={cardId} targetLabel={displayUrl} status={cardStatus} />
 
       <p className="text-[14px] leading-[1.5] text-mira-muted-text">
         our scout is now collecting and verifying evidence. we&rsquo;ll notify
@@ -132,21 +128,14 @@ export function CaseOpenPanel({ apiBase }: { apiBase: string }) {
       <div className="flex flex-wrap items-center gap-[14px]">
         <BackButton href="/signature" />
         {state === "ready" ? (
-          <LinkButton
-            href={`/case/${caseId}/live`}
-            variant="flow"
-            className="px-7"
-          >
-            watch mira work live
+          <LinkButton href="/cases" variant="flow" className="px-7">
+            go to case dashboard
           </LinkButton>
         ) : (
           <Button variant="flow" size="lg" className="px-7" disabled>
             {state === "error" ? "unavailable" : "opening…"}
           </Button>
         )}
-        <LinkButton href="/dashboard" variant="ghost" size="md">
-          all cases
-        </LinkButton>
       </div>
 
       {state === "error" && (

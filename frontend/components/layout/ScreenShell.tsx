@@ -27,8 +27,8 @@ export function ScreenShell({
   centered?: boolean;
   footer: ReactNode;
   children: ReactNode;
-  // Where the header wordmark links. App surfaces (dashboard/live) keep the user
-  // inside the app (/dashboard); the onboarding flow returns to the landing.
+  // Where the header wordmark links. App surfaces keep the user inside the app
+  // (/cases); the onboarding flow returns to the landing.
   homeHref?: string;
 }) {
   const widthStyle = { maxWidth: contentWidth };
