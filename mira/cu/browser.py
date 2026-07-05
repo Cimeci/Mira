@@ -23,6 +23,11 @@ _ENV_FILE = ".env.local"
 # En mode visible, on ralentit chaque geste : sans ça l'agent clique/scrolle trop
 # vite pour qu'on puisse suivre à l'œil « ce qu'il fait » pendant le tracking.
 _HEADED_SLOWMO_MS = 250
+# Flags conteneur (spec §10) : Chromium tourne dans un Docker sans user namespaces
+# (--no-sandbox) et avec un /dev/shm réduit (--disable-dev-shm-usage écrit les temp
+# sur disque au lieu de saturer la mémoire partagée et crasher la page). Sans effet
+# de bord hors conteneur : le navigateur est déjà isolé au niveau réseau (route guard).
+_CONTAINER_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"]
 
 
 def _env(name: str) -> str | None:
@@ -47,7 +52,7 @@ def _launch_kwargs() -> dict:
         if slowmo_raw and slowmo_raw.isdigit()
         else (_HEADED_SLOWMO_MS if headed else 0)
     )
-    return {"headless": not headed, "slow_mo": slow_mo}
+    return {"headless": not headed, "slow_mo": slow_mo, "args": _CONTAINER_ARGS}
 
 
 async def _abort_out_of_scope(route: Route) -> None:
