@@ -1,7 +1,10 @@
 import { Fragment } from "react";
 import { cn } from "@/lib/cn";
 
-const STEPS: { label: string; note?: string; active?: boolean }[] = [
+export type TimelineStep = { label: string; note?: string; active?: boolean };
+
+/** The standard six-step case timeline (first step in progress, rest awaiting). */
+export const DEFAULT_TIMELINE_STEPS: TimelineStep[] = [
   { label: "collect evidence", active: true },
   { label: "verify match" },
   { label: "send platform report", note: "(if chosen)" },
@@ -11,14 +14,18 @@ const STEPS: { label: string; note?: string; active?: boolean }[] = [
 ];
 
 /** Vertical case timeline: first step in progress, the rest awaiting. */
-export function CaseTimeline() {
+export function CaseTimeline({
+  steps = DEFAULT_TIMELINE_STEPS,
+}: {
+  steps?: TimelineStep[];
+}) {
   return (
     <div className="flex flex-1 flex-col rounded-chip border border-[rgba(181,107,255,0.35)] bg-mira-night p-7">
       <div className="mb-[18px] text-label uppercase tracking-label text-mira-muted-text">
         case timeline
       </div>
 
-      {STEPS.map((step, i) => (
+      {steps.map((step, i) => (
         <Fragment key={step.label}>
           <div className="flex items-center gap-[14px]">
             <div
@@ -47,7 +54,7 @@ export function CaseTimeline() {
               )}
             </div>
           </div>
-          {i < STEPS.length - 1 && (
+          {i < steps.length - 1 && (
             <div
               className={cn(
                 "ml-[6.5px] h-[22px] w-px",
