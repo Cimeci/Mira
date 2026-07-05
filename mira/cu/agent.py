@@ -8,6 +8,7 @@ capture → le modèle renvoie une action → on l'exécute → nouvelle capture
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import AsyncIterator
 
@@ -23,10 +24,24 @@ from .live import data_uri
 from .models import ScrapedImage, ScrapeResult
 from .scraper import _resolve_creds, _validate_url, extract_images
 
-MODEL = "gemini-2.5-computer-use-preview-10-2025"
+# Modèle Computer Use, surchargeable SANS toucher au code via MIRA_CU_MODEL
+# (.env.local ou variable d'env). Défaut : gemini-3-flash-preview ; bascule possible
+# vers gemini-2.5-computer-use-preview-10-2025 si un environnement ne sert pas la 3.
+_DEFAULT_MODEL = "gemini-3-flash-preview"
 _MAX_STEPS = 12
 _ENV_FILE = ".env.local"
 _FRAME_QUALITY = 55  # JPEG : compromis netteté / poids pour le stream
+
+
+def _env(name: str) -> str | None:
+    """os.getenv puis `.env.local` (même source que la clé API) : le switch marche
+    qu'on l'exporte au shell OU qu'on le pose dans le fichier d'env local."""
+    return os.getenv(name) or dotenv_values(_ENV_FILE).get(name)
+
+
+def _model() -> str:
+    """Modèle CU courant : MIRA_CU_MODEL s'il est défini, sinon le défaut gemini-3."""
+    return _env("MIRA_CU_MODEL") or _DEFAULT_MODEL
 
 
 def _api_key() -> str | None:
@@ -114,7 +129,7 @@ async def _run_cu_loop(
 
     for _step in range(1, max_steps + 1):
         response = await client.aio.models.generate_content(
-            model=MODEL, contents=contents, config=config
+            model=_model(), contents=contents, config=config
         )
         # Le modèle peut renvoyer une réponse SANS candidat (filtrage de sécurité, quota,
         # réponse vide) : `response.candidates[0]` planterait alors en 'NoneType'. On
